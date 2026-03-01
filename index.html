@@ -278,7 +278,8 @@
                         ctx.font = `500 ${Math.max(14, Math.floor(52 * calContentScale))}px ${FONT_NAME}`;
                         ctx.textAlign = 'left';
                         ctx.textBaseline = 'alphabetic';
-                        ctx.fillText(`${month}月`, sideMargin, clockLimit + calVerticalShift - 11);
+                        // 月のラベルを位置調整 (15px右から5px左へ -> sideMargin + 10)
+                        ctx.fillText(`${month}月`, sideMargin + 10, clockLimit + calVerticalShift - 11);
 
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
