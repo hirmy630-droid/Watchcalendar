@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Watch calendar</title>
+    <!-- React, Babel, Tailwind, Lucide Icons -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Arial:wght@400;700&display=swap');
+        body { 
+            font-family: 'Arial', sans-serif; 
+            overscroll-behavior-y: contain;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #3b82f6;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-white min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- システム標準の初期値 ---
+        const SYSTEM_DEFAULTS = {
+            verticalShift: 8,
+            sideMargin: 27,
+            bottomPadding: 43,
+            contentScale: 0.98,
+            bgScale: 1.2,
+            bgOffset: { x: -95, y: -135 }
+        };
+
+        // --- UI Components ---
+        const Slider = ({ label, value, min, max, step = 1, onChange, onReset, color = "blue" }) => (
+            <div className="flex flex-col gap-2 w-full py-1">
+                <div className="flex items-center justify-between w-full">
+                    <span className="text-[14px] font-bold text-zinc-400">{label}</span>
+                    <div className="flex items-center gap-3">
+                        <span className={`text-[14px] font-mono font-bold text-${color}-400 text-right`}>
+                            {step < 1 ? value.toFixed(2) : value}
+                        </span>
+                        <button 
+                            onClick={onReset}
+                            className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-500 hover:text-white active:scale-90"
+                            title="初期値に戻す"
+                        >
+                            <i data-lucide="rotate-ccw" className="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+                <input 
+                    type="range" min={min} max={max} step={step} value={value} 
+                    onChange={(e) => onChange(parseFloat(e.target.value))} 
+                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-zinc-800"
+                />
+            </div>
+        );
+
+        const App = () => {
+            const STORAGE_KEY = 'watch_calendar_current_state_v2';
+            const DEFAULTS_KEY = 'watch_calendar_user_defaults_v2';
+            
+            const canvasRef = useRef(null);
+            const fileInputRef = useRef(null);
+
+            const [year, setYear] = useState(new Date().getFullYear());
+            const [month, setMonth] = useState(new Date().getMonth() + 1);
+            const [userDefaults, setUserDefaults] = useState(SYSTEM_DEFAULTS);
+
+            const [bgImage, setBgImage] = useState(null);
+            const [bgScale, setBgScale] = useState(SYSTEM_DEFAULTS.bgScale);
+            const [bgOffset, setBgOffset] = useState(SYSTEM_DEFAULTS.bgOffset);
+            const [calVerticalShift, setCalVerticalShift] = useState(SYSTEM_DEFAULTS.verticalShift);
+            const [calBottomPadding, setCalBottomPadding] = useState(SYSTEM_DEFAULTS.bottomPadding);
+            const [calSideMargin, setCalSideMargin] = useState(SYSTEM_DEFAULTS.sideMargin);
+            const [calContentScale, setCalContentScale] = useState(SYSTEM_DEFAULTS.contentScale);
+
+            const [isDragging, setIsDragging] = useState(false);
+            const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+            const [initialDist, setInitialDist] = useState(null);
+
+            // スマホ等での縮小表示用スケール
+            const [previewScale, setPreviewScale] = useState(1);
+            
+            // 生成された画像を表示するためのStateを追加
+            const [generatedImage, setGeneratedImage] = useState(null);
+
+            const WATCH_WIDTH = 416;
+            const WATCH_HEIGHT = 496;
+            const FONT_NAME = "Arial";
+
+            // 画面幅に応じたプレビューの縮小計算
+            useEffect(() => {
+                const handleResize = () => {
+                    const containerWidth = Math.min(window.innerWidth - 32, 416); // 左右の余白16pxを考慮
+                    setPreviewScale(containerWidth / 416);
+                };
+                window.addEventListener('resize', handleResize);
+                handleResize();
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            useEffect(() => {
+                const savedDefaults = localStorage.getItem(DEFAULTS_KEY);
+                if (savedDefaults) {
+                    try { setUserDefaults(JSON.parse(savedDefaults)); } catch (e) { console.error(e); }
+                }
+                const savedState = localStorage.getItem(STORAGE_KEY);
+                if (savedState) {
+                    try {
+                        const data = JSON.parse(savedState);
+                        if (data.bgImage) setBgImage(data.bgImage);
+                        if (data.bgScale) setBgScale(data.bgScale);
+                        if (data.bgOffset) setBgOffset(data.bgOffset);
+                        if (data.calVerticalShift !== undefined) setCalVerticalShift(data.calVerticalShift);
+                        if (data.calBottomPadding !== undefined) setCalBottomPadding(data.calBottomPadding);
+                        if (data.calSideMargin !== undefined) setCalSideMargin(data.calSideMargin);
+                        if (data.calContentScale !== undefined) setCalContentScale(data.calContentScale);
+                    } catch (e) { console.error(e); }
+                }
+            }, []);
+
+            const saveSettings = (updates = {}) => {
+                const current = {
+                    bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale,
+                    ...updates
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+            };
+
+            const handleSetAsDefault = () => {
+                const newDefaults = {
+                    verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding,
+                    contentScale: calContentScale, bgScale: bgScale, bgOffset: bgOffset
+                };
+                localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newDefaults));
+                setUserDefaults(newDefaults);
+                alert("現在の設定を初期値に保存しました");
+            };
+
+            const holidays = useMemo(() => {
+                const h = new Set();
+                const fixed = { 1: [1], 2: [11, 23], 4: [29], 5: [3, 4, 5], 8: [11], 11: [3, 23] };
+                if (fixed[month]) fixed[month].forEach(d => h.add(d));
+                const getNthMonday = (y, m, n) => {
+                    const firstDay = new Date(y, m - 1, 1).getDay();
+                    let firstMonday = (firstDay <= 1) ? (1 - firstDay + 1) : (1 - firstDay + 8);
+                    return firstMonday + (n - 1) * 7;
+                };
+                if (month === 1) h.add(getNthMonday(year, 1, 2));
+                if (month === 7) h.add(getNthMonday(year, 7, 3));
+                if (month === 9) h.add(getNthMonday(year, 9, 3));
+                if (month === 10) h.add(getNthMonday(year, 10, 2));
+                if (month === 3) h.add(Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4)));
+                if (month === 9) h.add(Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4)));
+                Array.from(h).sort((a, b) => a - b).forEach(d => {
+                    if (new Date(year, month - 1, d).getDay() === 0) {
+                        let nextDay = d + 1;
+                        while (h.has(nextDay)) nextDay++;
+                        if (nextDay <= new Date(year, month, 0).getDate()) h.add(nextDay);
+                    }
+                });
+                return h;
+            }, [year, month]);
+
+            const weeks = useMemo(() => {
+                const firstDay = new Date(year, month - 1, 1).getDay();
+                const lastDate = new Date(year, month, 0).getDate();
+                const days = Array(firstDay).fill(null).concat(Array.from({ length: lastDate }, (_, i) => i + 1));
+                const res = [];
+                for (let i = 0; i < days.length; i += 7) res.push(days.slice(i, i + 7));
+                return res;
+            }, [year, month]);
+
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        setBgImage(ev.target.result);
+                        saveSettings({ bgImage: ev.target.result });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const handleStart = (e) => {
+                if (!bgImage) return;
+                const touches = e.touches;
+                if (touches && touches.length === 2) {
+                    setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY));
+                    setIsDragging(false);
+                } else {
+                    const cx = touches ? touches[0].clientX : e.clientX;
+                    const cy = touches ? touches[0].clientY : e.clientY;
+                    setIsDragging(true);
+                    setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y });
+                }
+            };
+
+            const handleMove = (e) => {
+                if (!bgImage) return;
+                const touches = e.touches;
+                if (touches && touches.length === 2) {
+                    if (initialDist === null) return;
+                    const newDist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+                    const ratio = newDist / initialDist;
+                    setBgScale(s => Math.min(Math.max(0.1, s * ratio), 5));
+                    setInitialDist(newDist);
+                } else if (isDragging) {
+                    const cx = touches ? touches[0].clientX : e.clientX;
+                    const cy = touches ? touches[0].clientY : e.clientY;
+                    setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y });
+                }
+            };
+
+            const handleEnd = () => {
+                setIsDragging(false);
+                setInitialDist(null);
+                saveSettings();
+            };
+
+            const renderCanvas = (showComps = true) => {
+                return new Promise((resolve) => {
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(0, 0, WATCH_WIDTH, WATCH_HEIGHT);
+
+                    const drawText = () => {
+                        const clockLimit = 180;
+                        const precipLimit = 440;
+                        const sideMargin = calSideMargin;
+                        const drawWidth = WATCH_WIDTH - (sideMargin * 2);
+                        const safeBottom = precipLimit - calBottomPadding;
+                        const areaHeight = safeBottom - clockLimit;
+                        const rowHeight = (areaHeight / (weeks.length + 1)) * calContentScale;
+                        const totalHeight = rowHeight * (weeks.length + 1);
+                        const startY = clockLimit + (areaHeight - totalHeight) / 2 + calVerticalShift;
+
+                        if (showComps) {
+                            ctx.textAlign = 'right';
+                            ctx.fillStyle = 'white';
+                            ctx.textBaseline = 'alphabetic';
+                            ctx.font = `400 36px ${FONT_NAME}`;
+                            ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
+                            ctx.font = `300 110px ${FONT_NAME}`;
+                            ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
+                            const topGap = startY - clockLimit;
+                            const bGuideY = (startY + totalHeight) + topGap;
+                            ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+                            ctx.setLineDash([5, 5]);
+                            ctx.beginPath();
+                            ctx.moveTo(0, clockLimit); ctx.lineTo(WATCH_WIDTH, clockLimit);
+                            ctx.moveTo(0, bGuideY); ctx.lineTo(WATCH_WIDTH, bGuideY);
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+                            ctx.fillStyle = '#CCC';
+                            ctx.font = `400 32px ${FONT_NAME}`;
+                            ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
+                        }
+
+                        ctx.fillStyle = 'white';
+                        ctx.font = `500 ${Math.max(14, Math.floor(52 * calContentScale))}px ${FONT_NAME}`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'alphabetic';
+                        ctx.fillText(`${month}月`, sideMargin, clockLimit + calVerticalShift - 11);
+
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        const colW = drawWidth / 7;
+                        const days = ['日', '月', '火', '水', '木', '金', '土'];
+                        const headerFontSize = Math.max(14, Math.floor(21 * calContentScale));
+                        ctx.font = `500 ${headerFontSize}px ${FONT_NAME}`;
+                        const hY = startY + (rowHeight * 0.5);
+                        days.forEach((d, i) => {
+                            ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF';
+                            ctx.fillText(d, sideMargin + i * colW + colW / 2, hY);
+                        });
+                        const lineY = hY + (headerFontSize / 2) + 2;
+                        ctx.strokeStyle = 'silver';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(sideMargin, lineY); ctx.lineTo(WATCH_WIDTH - sideMargin, lineY); ctx.stroke();
+
+                        ctx.font = `400 ${Math.max(14, Math.floor(29 * calContentScale))}px ${FONT_NAME}`;
+                        weeks.forEach((week, ri) => {
+                            const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
+                            week.forEach((day, ci) => {
+                                if (!day) return;
+                                ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF';
+                                ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY);
+                            });
+                        });
+                        resolve();
+                    };
+
+                    if (bgImage) {
+                        const img = new Image();
+                        img.src = bgImage;
+                        img.onload = () => {
+                            const dW = img.width * bgScale;
+                            const dH = img.height * bgScale;
+                            ctx.save();
+                            ctx.drawImage(img, (WATCH_WIDTH - dW) / 2 + bgOffset.x, (WATCH_HEIGHT - dH) / 2 + bgOffset.y, dW, dH);
+                            ctx.restore();
+                            drawText();
+                        };
+                    } else { drawText(); }
+                });
+            };
+
+            useEffect(() => { renderCanvas(true); }, [year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale]);
+
+            const downloadImage = async () => {
+                await renderCanvas(false);
+                // 直接ダウンロードするのではなく、画像URLを生成して画面に表示する
+                const dataUrl = canvasRef.current.toDataURL('image/png');
+                setGeneratedImage(dataUrl);
+                renderCanvas(true);
+            };
+
+            useEffect(() => {
+                const handleLucide = () => { if(window.lucide) window.lucide.createIcons(); };
+                handleLucide();
+                const timer = setTimeout(handleLucide, 500);
+                return () => clearTimeout(timer);
+            }, [bgImage]);
+
+            return (
+                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col lg:flex-row gap-6 items-center lg:items-start lg:justify-center">
+                    
+                    {/* 左側: 設定パネル - order-1 で常に上に表示 */}
+                    <div className="bg-zinc-900 p-5 sm:p-6 rounded-3xl border border-zinc-800 shadow-2xl w-full max-w-[416px] space-y-5 order-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                                <i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i>
+                                <h1 className="text-[16px] font-bold text-white">Watch calendar</h1>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold transition-all flex items-center gap-1 active:scale-95">
+                                    <i data-lucide="check" className="w-3.5 h-3.5"></i>デフォルト
+                                </button>
+                                <button onClick={() => {
+                                    if(confirm("リセットしますか？")) {
+                                        setCalVerticalShift(userDefaults.verticalShift); setCalSideMargin(userDefaults.sideMargin);
+                                        setCalBottomPadding(userDefaults.bottomPadding); setBgScale(userDefaults.bgScale);
+                                        setBgOffset(userDefaults.bgOffset); saveSettings(userDefaults);
+                                    }
+                                }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 transition-all flex items-center gap-1 active:scale-95">
+                                    <i data-lucide="refresh-cw" className="w-3.5 h-3.5"></i>リセット
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700">
+                                <label className="text-[14px] text-zinc-500 font-bold">年</label>
+                                <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold text-white"/>
+                            </div>
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700">
+                                <label className="text-[14px] text-zinc-500 font-bold">月</label>
+                                <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold text-white">
+                                    {Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* ここに overflow-hidden と w-full を追加し、内部のはみ出しを防止 */}
+                        <div className="bg-black/30 p-4 rounded-2xl border border-zinc-800 space-y-3 w-full overflow-hidden">
+                            <Slider label="上下位置" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => { setCalVerticalShift(userDefaults.verticalShift); }} />
+                            <Slider label="左右余白" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => { setCalSideMargin(userDefaults.sideMargin); }} />
+                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => { setCalBottomPadding(userDefaults.bottomPadding); }} color="red" />
+                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => { setBgScale(userDefaults.bgScale); }} color="zinc" />}
+                        </div>
+                    </div>
+
+                    {/* 右側: プレビューエリア - order-2 で常に下に表示 */}
+                    <div className="flex flex-col items-center w-full max-w-[416px] order-2">
+                        {/* レスポンシブで縮小するためのラッパー */}
+                        <div style={{ height: `${WATCH_HEIGHT * previewScale}px`, width: `${WATCH_WIDTH * previewScale}px` }} className="relative mb-4">
+                            <div 
+                                className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]"
+                                style={{ transform: `scale(${previewScale})` }}
+                                onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={handleEnd} onMouseLeave={handleEnd}
+                                onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
+                            >
+                                <div className="absolute -inset-4 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                                <div className="relative p-2 bg-gradient-to-b from-zinc-700 to-zinc-900 rounded-[64px] shadow-2xl overflow-hidden w-full h-full">
+                                    <div className="relative bg-black rounded-[56px] overflow-hidden border-[6px] border-zinc-900 shadow-inner w-full h-full">
+                                        <canvas ref={canvasRef} width={WATCH_WIDTH} height={WATCH_HEIGHT} className="block pointer-events-none w-full h-full"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ボタンエリア */}
+                        <div className="flex gap-3 w-full px-2 sm:px-0">
+                            <button onClick={() => fileInputRef.current.click()} className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg active:scale-95 transition-all">
+                                <span className="text-zinc-300">画像を選択</span>
+                            </button>
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+
+                            <button onClick={downloadImage} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all">
+                                <span>画像を作成する</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* 画像保存用モーダル (長押しで保存してもらう画面) */}
+                    {generatedImage && (
+                        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 touch-none">
+                            <p className="text-white mb-6 font-bold text-[16px] text-center leading-relaxed">
+                                画像を長押しして<br />「"写真"に保存」を選択してください
+                            </p>
+                            <img 
+                                src={generatedImage} 
+                                alt="Watch Calendar" 
+                                className="max-h-[60vh] rounded-[56px] border-[6px] border-zinc-800 shadow-2xl pointer-events-auto" 
+                            />
+                            <button 
+                                onClick={() => setGeneratedImage(null)}
+                                className="mt-8 px-8 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-full font-bold text-white transition-all border border-zinc-700 active:scale-95"
+                            >
+                                閉じる
+                            </button>
+                        </div>
+                    )}
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
