@@ -11,9 +11,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Arial:wght@400;700&display=swap');
         body { 
-            font-family: 'Arial', sans-serif; 
+            font-family: 'Helvetica', 'Arial', sans-serif; 
             overscroll-behavior-y: contain;
         }
         input[type="range"]::-webkit-slider-thumb {
@@ -101,7 +100,7 @@
 
             const WATCH_WIDTH = 416;
             const WATCH_HEIGHT = 496;
-            const FONT_NAME = "Arial";
+            const FONT_NAME = "Helvetica";
 
             // 画面幅に応じたプレビューの縮小計算
             useEffect(() => {
@@ -274,8 +273,9 @@
                             ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
                         }
 
+                        // 月ラベル
                         ctx.fillStyle = 'white';
-                        ctx.font = `500 ${Math.max(14, Math.floor(52 * calContentScale))}px ${FONT_NAME}`;
+                        ctx.font = `500 ${Math.max(14, Math.floor(53 * calContentScale))}px ${FONT_NAME}`;
                         ctx.textAlign = 'left';
                         ctx.textBaseline = 'alphabetic';
                         // 月のラベルを位置調整 (15px右から5px左へ -> sideMargin + 10)
@@ -285,19 +285,24 @@
                         ctx.textBaseline = 'middle';
                         const colW = drawWidth / 7;
                         const days = ['日', '月', '火', '水', '木', '金', '土'];
-                        const headerFontSize = Math.max(14, Math.floor(21 * calContentScale));
+                        const headerFontSize = Math.max(14, Math.floor(23 * calContentScale));
                         ctx.font = `500 ${headerFontSize}px ${FONT_NAME}`;
                         const hY = startY + (rowHeight * 0.5);
                         days.forEach((d, i) => {
                             ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF';
                             ctx.fillText(d, sideMargin + i * colW + colW / 2, hY);
                         });
+
+                        // 線の位置調整: 曜日の2px下に表示
                         const lineY = hY + (headerFontSize / 2) + 2;
                         ctx.strokeStyle = 'silver';
                         ctx.lineWidth = 1;
-                        ctx.beginPath(); ctx.moveTo(sideMargin, lineY); ctx.lineTo(WATCH_WIDTH - sideMargin, lineY); ctx.stroke();
+                        ctx.beginPath(); 
+                        ctx.moveTo(sideMargin, lineY); 
+                        ctx.lineTo(WATCH_WIDTH - sideMargin, lineY); 
+                        ctx.stroke();
 
-                        ctx.font = `400 ${Math.max(14, Math.floor(29 * calContentScale))}px ${FONT_NAME}`;
+                        ctx.font = `400 ${Math.max(14, Math.floor(31 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
                             week.forEach((day, ci) => {
