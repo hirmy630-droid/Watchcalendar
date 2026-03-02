@@ -69,7 +69,6 @@
             const MAX_HISTORY = 10;
             
             const canvasRef = useRef(null);
-            const fileInputRef = useRef(null);
 
             const [year, setYear] = useState(new Date().getFullYear());
             const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -145,6 +144,8 @@
                     };
                     reader.readAsDataURL(file);
                 }
+                // iPhone等で同じ画像を連続して選び直せるように値をクリアする
+                e.target.value = '';
             };
 
             const saveToHistory = (dataUrl) => {
@@ -231,6 +232,10 @@
                         const safeBottom = precipLimit - calBottomPadding, areaHeight = safeBottom - clockLimit;
                         const rowHeight = (areaHeight / (weeks.length + 1)) * calContentScale, totalHeight = rowHeight * (weeks.length + 1);
                         const startY = clockLimit + (areaHeight - totalHeight) / 2 + calVerticalShift;
+                        
+                        // 文字の縦位置を初期値にリセット（これで画像選択後の時計のズレが直ります）
+                        ctx.textBaseline = 'alphabetic';
+
                         if (showComps) {
                             ctx.textAlign = 'right'; ctx.fillStyle = 'white';
                             ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
@@ -317,9 +322,20 @@
                                 </div>
                             </div>
                         </div>
+
+                        {/* 画像選択ボタンの仕組みをオーバーレイ方式に変更 */}
                         <div className="flex gap-3 w-full px-2 sm:px-0">
-                            <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg active:scale-95 transition-all">画像を選択</button>
-                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                            <div className="relative flex-1 active:scale-95 transition-all">
+                                <div className="flex h-full items-center justify-center gap-2 bg-zinc-800 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg text-zinc-300 pointer-events-none">
+                                    <span>画像を選択</span>
+                                </div>
+                                <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                    onChange={handleImageUpload} 
+                                />
+                            </div>
                             <button onClick={downloadImage} className="flex-1 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all">画像を作成する</button>
                         </div>
                     </div>
