@@ -25,9 +25,6 @@
             border-radius: 50%;
             border: 2px solid white;
         }
-        /* スクロールバーを非表示にしつつスクロール可能にする */
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-zinc-950 text-white min-h-screen">
@@ -36,6 +33,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
+        // --- システム標準の初期値 ---
         const SYSTEM_DEFAULTS = {
             verticalShift: 8,
             sideMargin: 27,
@@ -45,6 +43,7 @@
             bgOffset: { x: -95, y: -135 }
         };
 
+        // --- UI Components ---
         const Slider = ({ label, value, min, max, step = 1, onChange, onReset, color = "blue" }) => (
             <div className="flex flex-col gap-2 w-full py-1">
                 <div className="flex items-center justify-between w-full">
@@ -53,26 +52,34 @@
                         <span className={`text-[14px] font-mono font-bold text-${color}-400 text-right`}>
                             {step < 1 ? value.toFixed(2) : value}
                         </span>
-                        <button onClick={onReset} className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-500 hover:text-white active:scale-90">
+                        <button 
+                            onClick={onReset}
+                            className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-500 hover:text-white active:scale-90"
+                            title="初期値に戻す"
+                        >
                             <i data-lucide="rotate-ccw" className="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>
-                <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-zinc-800" />
+                <input 
+                    type="range" min={min} max={max} step={step} value={value} 
+                    onChange={(e) => onChange(parseFloat(e.target.value))} 
+                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-zinc-800"
+                />
             </div>
         );
 
         const App = () => {
-            const STORAGE_KEY = 'watch_calendar_state_v3';
-            const DEFAULTS_KEY = 'watch_calendar_user_defaults_v3';
-            const HISTORY_KEY = 'watch_calendar_history_v3';
-            const MAX_HISTORY = 10;
+            const STORAGE_KEY = 'watch_calendar_current_state_v2';
+            const DEFAULTS_KEY = 'watch_calendar_user_defaults_v2';
             
             const canvasRef = useRef(null);
+            const fileInputRef = useRef(null);
 
             const [year, setYear] = useState(new Date().getFullYear());
             const [month, setMonth] = useState(new Date().getMonth() + 1);
             const [userDefaults, setUserDefaults] = useState(SYSTEM_DEFAULTS);
+
             const [bgImage, setBgImage] = useState(null);
             const [bgScale, setBgScale] = useState(SYSTEM_DEFAULTS.bgScale);
             const [bgOffset, setBgOffset] = useState(SYSTEM_DEFAULTS.bgOffset);
@@ -80,20 +87,25 @@
             const [calBottomPadding, setCalBottomPadding] = useState(SYSTEM_DEFAULTS.bottomPadding);
             const [calSideMargin, setCalSideMargin] = useState(SYSTEM_DEFAULTS.sideMargin);
             const [calContentScale, setCalContentScale] = useState(SYSTEM_DEFAULTS.contentScale);
+
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
             const [initialDist, setInitialDist] = useState(null);
+
+            // スマホ等での縮小表示用スケール
             const [previewScale, setPreviewScale] = useState(1);
-            const [modalImage, setModalImage] = useState(null);
-            const [history, setHistory] = useState([]);
+            
+            // 生成された画像を表示するためのStateを追加
+            const [generatedImage, setGeneratedImage] = useState(null);
 
             const WATCH_WIDTH = 416;
             const WATCH_HEIGHT = 496;
             const FONT_NAME = "Helvetica";
 
+            // 画面幅に応じたプレビューの縮小計算
             useEffect(() => {
                 const handleResize = () => {
-                    const containerWidth = Math.min(window.innerWidth - 32, 416);
+                    const containerWidth = Math.min(window.innerWidth - 32, 416); // 左右の余白16pxを考慮
                     setPreviewScale(containerWidth / 416);
                 };
                 window.addEventListener('resize', handleResize);
@@ -103,118 +115,40 @@
 
             useEffect(() => {
                 const savedDefaults = localStorage.getItem(DEFAULTS_KEY);
-                if (savedDefaults) try { setUserDefaults(JSON.parse(savedDefaults)); } catch(e){}
+                if (savedDefaults) {
+                    try { setUserDefaults(JSON.parse(savedDefaults)); } catch (e) { console.error(e); }
+                }
                 const savedState = localStorage.getItem(STORAGE_KEY);
                 if (savedState) {
                     try {
-                        const d = JSON.parse(savedState);
-                        if (d.bgImage) setBgImage(d.bgImage);
-                        if (d.bgScale) setBgScale(d.bgScale);
-                        if (d.bgOffset) setBgOffset(d.bgOffset);
-                        if (d.calVerticalShift !== undefined) setCalVerticalShift(d.calVerticalShift);
-                        if (d.calBottomPadding !== undefined) setCalBottomPadding(d.calBottomPadding);
-                        if (d.calSideMargin !== undefined) setCalSideMargin(d.calSideMargin);
-                        if (d.calContentScale !== undefined) setCalContentScale(d.calContentScale);
-                    } catch(e){}
+                        const data = JSON.parse(savedState);
+                        if (data.bgImage) setBgImage(data.bgImage);
+                        if (data.bgScale) setBgScale(data.bgScale);
+                        if (data.bgOffset) setBgOffset(data.bgOffset);
+                        if (data.calVerticalShift !== undefined) setCalVerticalShift(data.calVerticalShift);
+                        if (data.calBottomPadding !== undefined) setCalBottomPadding(data.calBottomPadding);
+                        if (data.calSideMargin !== undefined) setCalSideMargin(data.calSideMargin);
+                        if (data.calContentScale !== undefined) setCalContentScale(data.calContentScale);
+                    } catch (e) { console.error(e); }
                 }
-                const savedHistory = localStorage.getItem(HISTORY_KEY);
-                if (savedHistory) try { setHistory(JSON.parse(savedHistory)); } catch(e){}
             }, []);
 
             const saveSettings = (updates = {}) => {
-                const current = { bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, ...updates };
-                try {
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-                } catch (e) {
-                    console.error("保存容量の限界です", e);
-                }
+                const current = {
+                    bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale,
+                    ...updates
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
             };
 
             const handleSetAsDefault = () => {
-                const newD = { verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding, contentScale: calContentScale, bgScale, bgOffset };
-                localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newD));
-                setUserDefaults(newD);
+                const newDefaults = {
+                    verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding,
+                    contentScale: calContentScale, bgScale: bgScale, bgOffset: bgOffset
+                };
+                localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newDefaults));
+                setUserDefaults(newDefaults);
                 alert("現在の設定を初期値に保存しました");
-            };
-
-            const handleImageUpload = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const MAX_SIZE = 1000;
-                        let width = img.width;
-                        let height = img.height;
-
-                        if (width > height && width > MAX_SIZE) {
-                            height *= MAX_SIZE / width;
-                            width = MAX_SIZE;
-                        } else if (height > MAX_SIZE) {
-                            width *= MAX_SIZE / height;
-                            height = MAX_SIZE;
-                        }
-
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-
-                        const compressedData = canvas.toDataURL('image/jpeg', 0.8);
-                        
-                        setBgImage(compressedData);
-                        saveSettings({ bgImage: compressedData });
-                    };
-                    img.src = ev.target.result;
-                };
-                reader.readAsDataURL(file);
-            };
-
-            const saveToHistory = (dataUrl) => {
-                const thumbCanvas = document.createElement('canvas');
-                thumbCanvas.width = 104; thumbCanvas.height = 124;
-                const tCtx = thumbCanvas.getContext('2d');
-                const img = new Image();
-                img.src = dataUrl;
-                img.onload = () => {
-                    tCtx.drawImage(img, 0, 0, 104, 124);
-                    const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.7);
-                    const newItem = {
-                        id: Date.now(), year, month, thumbnail: thumbUrl,
-                        settings: { bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale }
-                    };
-                    setHistory(prev => {
-                        const newH = [newItem, ...prev].slice(0, MAX_HISTORY);
-                        localStorage.setItem(HISTORY_KEY, JSON.stringify(newH));
-                        return newH;
-                    });
-                };
-            };
-
-            const restoreFromHistory = (item) => {
-                if(!confirm("この履歴の設定を復元しますか？現在の作業内容は上書きされます。")) return;
-                const s = item.settings;
-                setYear(item.year); setMonth(item.month);
-                if (s.bgImage) setBgImage(s.bgImage);
-                setBgScale(s.bgScale); setBgOffset(s.bgOffset);
-                setCalVerticalShift(s.calVerticalShift); setCalBottomPadding(s.calBottomPadding);
-                setCalSideMargin(s.calSideMargin); setCalContentScale(s.calContentScale);
-                saveSettings(s);
-                setModalImage(null);
-            };
-
-            const deleteHistory = (e, id) => {
-                e.stopPropagation();
-                if(confirm("削除しますか？")) {
-                    setHistory(prev => {
-                        const newH = prev.filter(h => h.id !== id);
-                        localStorage.setItem(HISTORY_KEY, JSON.stringify(newH));
-                        return newH;
-                    });
-                }
             };
 
             const holidays = useMemo(() => {
@@ -223,17 +157,20 @@
                 if (fixed[month]) fixed[month].forEach(d => h.add(d));
                 const getNthMonday = (y, m, n) => {
                     const firstDay = new Date(y, m - 1, 1).getDay();
-                    let fm = (firstDay <= 1) ? (1 - firstDay + 1) : (1 - firstDay + 8);
-                    return fm + (n - 1) * 7;
+                    let firstMonday = (firstDay <= 1) ? (1 - firstDay + 1) : (1 - firstDay + 8);
+                    return firstMonday + (n - 1) * 7;
                 };
-                if (month === 1) h.add(getNthMonday(year, 1, 2)); if (month === 7) h.add(getNthMonday(year, 7, 3));
-                if (month === 9) h.add(getNthMonday(year, 9, 3)); if (month === 10) h.add(getNthMonday(year, 10, 2));
+                if (month === 1) h.add(getNthMonday(year, 1, 2));
+                if (month === 7) h.add(getNthMonday(year, 7, 3));
+                if (month === 9) h.add(getNthMonday(year, 9, 3));
+                if (month === 10) h.add(getNthMonday(year, 10, 2));
                 if (month === 3) h.add(Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4)));
                 if (month === 9) h.add(Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4)));
                 Array.from(h).sort((a, b) => a - b).forEach(d => {
                     if (new Date(year, month - 1, d).getDay() === 0) {
-                        let nd = d + 1; while (h.has(nd)) nd++;
-                        if (nd <= new Date(year, month, 0).getDate()) h.add(nd);
+                        let nextDay = d + 1;
+                        while (h.has(nextDay)) nextDay++;
+                        if (nextDay <= new Date(year, month, 0).getDate()) h.add(nextDay);
                     }
                 });
                 return h;
@@ -243,47 +180,152 @@
                 const firstDay = new Date(year, month - 1, 1).getDay();
                 const lastDate = new Date(year, month, 0).getDate();
                 const days = Array(firstDay).fill(null).concat(Array.from({ length: lastDate }, (_, i) => i + 1));
-                const res = []; for (let i = 0; i < days.length; i += 7) res.push(days.slice(i, i + 7));
+                const res = [];
+                for (let i = 0; i < days.length; i += 7) res.push(days.slice(i, i + 7));
                 return res;
             }, [year, month]);
+
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        setBgImage(ev.target.result);
+                        saveSettings({ bgImage: ev.target.result });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const handleStart = (e) => {
+                if (!bgImage) return;
+                const touches = e.touches;
+                if (touches && touches.length === 2) {
+                    setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY));
+                    setIsDragging(false);
+                } else {
+                    const cx = touches ? touches[0].clientX : e.clientX;
+                    const cy = touches ? touches[0].clientY : e.clientY;
+                    setIsDragging(true);
+                    setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y });
+                }
+            };
+
+            const handleMove = (e) => {
+                if (!bgImage) return;
+                const touches = e.touches;
+                if (touches && touches.length === 2) {
+                    if (initialDist === null) return;
+                    const newDist = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+                    const ratio = newDist / initialDist;
+                    setBgScale(s => Math.min(Math.max(0.1, s * ratio), 5));
+                    setInitialDist(newDist);
+                } else if (isDragging) {
+                    const cx = touches ? touches[0].clientX : e.clientX;
+                    const cy = touches ? touches[0].clientY : e.clientY;
+                    setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y });
+                }
+            };
+
+            const handleEnd = () => {
+                setIsDragging(false);
+                setInitialDist(null);
+                saveSettings();
+            };
 
             const renderCanvas = (showComps = true) => {
                 return new Promise((resolve) => {
                     const canvas = canvasRef.current;
                     const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, WATCH_WIDTH, WATCH_HEIGHT);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(0, 0, WATCH_WIDTH, WATCH_HEIGHT);
+
                     const drawText = () => {
-                        const clockLimit = 180, precipLimit = 440, sideMargin = calSideMargin, drawWidth = WATCH_WIDTH - (sideMargin * 2);
-                        const safeBottom = precipLimit - calBottomPadding, areaHeight = safeBottom - clockLimit;
-                        const rowHeight = (areaHeight / (weeks.length + 1)) * calContentScale, totalHeight = rowHeight * (weeks.length + 1);
+                        const clockLimit = 180;
+                        const precipLimit = 440;
+                        const sideMargin = calSideMargin;
+                        const drawWidth = WATCH_WIDTH - (sideMargin * 2);
+                        const safeBottom = precipLimit - calBottomPadding;
+                        const areaHeight = safeBottom - clockLimit;
+                        const rowHeight = (areaHeight / (weeks.length + 1)) * calContentScale;
+                        const totalHeight = rowHeight * (weeks.length + 1);
                         const startY = clockLimit + (areaHeight - totalHeight) / 2 + calVerticalShift;
-                        
-                        ctx.textBaseline = 'alphabetic';
 
                         if (showComps) {
-                            ctx.textAlign = 'right'; ctx.fillStyle = 'white';
-                            ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
-                            ctx.font = `300 110px ${FONT_NAME}`; ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
-                            const topGap = startY - clockLimit, bGuideY = (startY + totalHeight) + topGap;
-                            ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)'; ctx.setLineDash([5, 5]); ctx.beginPath();
-                            ctx.moveTo(0, clockLimit); ctx.lineTo(WATCH_WIDTH, clockLimit); ctx.moveTo(0, bGuideY); ctx.lineTo(WATCH_WIDTH, bGuideY); ctx.stroke();
-                            ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
+                            ctx.textAlign = 'right';
+                            ctx.fillStyle = 'white';
+                            ctx.textBaseline = 'alphabetic';
+                            ctx.font = `400 36px ${FONT_NAME}`;
+                            ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
+                            ctx.font = `300 110px ${FONT_NAME}`;
+                            ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
+                            const topGap = startY - clockLimit;
+                            const bGuideY = (startY + totalHeight) + topGap;
+                            ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+                            ctx.setLineDash([5, 5]);
+                            ctx.beginPath();
+                            ctx.moveTo(0, clockLimit); ctx.lineTo(WATCH_WIDTH, clockLimit);
+                            ctx.moveTo(0, bGuideY); ctx.lineTo(WATCH_WIDTH, bGuideY);
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+                            ctx.fillStyle = '#CCC';
+                            ctx.font = `400 32px ${FONT_NAME}`;
+                            ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
                         }
-                        ctx.fillStyle = 'white'; ctx.font = `500 ${Math.max(14, Math.floor(53 * calContentScale))}px ${FONT_NAME}`;
-                        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(`${month}月`, sideMargin + 10, clockLimit + calVerticalShift - 11);
-                        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const colW = drawWidth / 7; const days = ['日', '月', '火', '水', '木', '金', '土'];
-                        const hFontSize = Math.max(14, Math.floor(23 * calContentScale)); ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
-                        const hY = startY + (rowHeight * 0.5); days.forEach((d, i) => { ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); });
-                        const lY = hY + (hFontSize / 2) + 2; ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
+
+                        // 月ラベル
+                        ctx.fillStyle = 'white';
+                        ctx.font = `500 ${Math.max(14, Math.floor(53 * calContentScale))}px ${FONT_NAME}`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'alphabetic';
+                        // 月のラベルを位置調整 (15px右から5px左へ -> sideMargin + 10)
+                        ctx.fillText(`${month}月`, sideMargin + 10, clockLimit + calVerticalShift - 11);
+
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        const colW = drawWidth / 7;
+                        const days = ['日', '月', '火', '水', '木', '金', '土'];
+                        const headerFontSize = Math.max(14, Math.floor(23 * calContentScale));
+                        ctx.font = `500 ${headerFontSize}px ${FONT_NAME}`;
+                        const hY = startY + (rowHeight * 0.5);
+                        days.forEach((d, i) => {
+                            ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF';
+                            ctx.fillText(d, sideMargin + i * colW + colW / 2, hY);
+                        });
+
+                        // 線の位置調整: 曜日の2px下に表示
+                        const lineY = hY + (headerFontSize / 2) + 2;
+                        ctx.strokeStyle = 'silver';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); 
+                        ctx.moveTo(sideMargin, lineY); 
+                        ctx.lineTo(WATCH_WIDTH - sideMargin, lineY); 
+                        ctx.stroke();
+
                         ctx.font = `400 ${Math.max(14, Math.floor(31 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
-                            week.forEach((day, ci) => { if (!day) return; ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY); });
+                            week.forEach((day, ci) => {
+                                if (!day) return;
+                                ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF';
+                                ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY);
+                            });
                         });
                         resolve();
                     };
-                    if (bgImage) { const img = new Image(); img.src = bgImage; img.onload = () => { const dW = img.width * bgScale, dH = img.height * bgScale; ctx.save(); ctx.drawImage(img, (WATCH_WIDTH - dW) / 2 + bgOffset.x, (WATCH_HEIGHT - dH) / 2 + bgOffset.y, dW, dH); ctx.restore(); drawText(); }; }
-                    else { drawText(); }
+
+                    if (bgImage) {
+                        const img = new Image();
+                        img.src = bgImage;
+                        img.onload = () => {
+                            const dW = img.width * bgScale;
+                            const dH = img.height * bgScale;
+                            ctx.save();
+                            ctx.drawImage(img, (WATCH_WIDTH - dW) / 2 + bgOffset.x, (WATCH_HEIGHT - dH) / 2 + bgOffset.y, dW, dH);
+                            ctx.restore();
+                            drawText();
+                        };
+                    } else { drawText(); }
                 });
             };
 
@@ -291,41 +333,59 @@
 
             const downloadImage = async () => {
                 await renderCanvas(false);
+                // 直接ダウンロードするのではなく、画像URLを生成して画面に表示する
                 const dataUrl = canvasRef.current.toDataURL('image/png');
-                setModalImage({ url: dataUrl, type: 'new' });
-                saveToHistory(dataUrl);
+                setGeneratedImage(dataUrl);
                 renderCanvas(true);
             };
 
-            const handleStart = (e) => {
-                if (!bgImage) return; const touches = e.touches;
-                if (touches && touches.length === 2) { setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)); setIsDragging(false); }
-                else { const cx = touches ? touches[0].clientX : e.clientX, cy = touches ? touches[0].clientY : e.clientY; setIsDragging(true); setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y }); }
-            };
-
-            const handleMove = (e) => {
-                if (!bgImage) return; const touches = e.touches;
-                if (touches && touches.length === 2) { if (initialDist === null) return; const nd = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); const r = nd / initialDist; setBgScale(s => Math.min(Math.max(0.1, s * r), 5)); setInitialDist(nd); }
-                else if (isDragging) { const cx = touches ? touches[0].clientX : e.clientX, cy = touches ? touches[0].clientY : e.clientY; setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y }); }
-            };
-
-            useEffect(() => { if(window.lucide) window.lucide.createIcons(); }, [bgImage, history, modalImage]);
+            useEffect(() => {
+                const handleLucide = () => { if(window.lucide) window.lucide.createIcons(); };
+                handleLucide();
+                const timer = setTimeout(handleLucide, 500);
+                return () => clearTimeout(timer);
+            }, [bgImage]);
 
             return (
-                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col items-center gap-6">
-                    {/* 設定パネル */}
-                    <div className="bg-zinc-900 p-5 sm:p-6 rounded-3xl border border-zinc-800 shadow-2xl w-full max-w-[416px] space-y-5">
+                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col lg:flex-row gap-6 items-center lg:items-start lg:justify-center">
+                    
+                    {/* 左側: 設定パネル - order-1 で常に上に表示 */}
+                    <div className="bg-zinc-900 p-5 sm:p-6 rounded-3xl border border-zinc-800 shadow-2xl w-full max-w-[416px] space-y-5 order-1">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-                            <div className="flex items-center gap-2 text-white"><i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i><h1 className="text-[16px] font-bold">Watch calendar</h1></div>
+                            <div className="flex items-center gap-2">
+                                <i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i>
+                                <h1 className="text-[16px] font-bold text-white">Watch calendar</h1>
+                            </div>
                             <div className="flex gap-2">
-                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold transition-all flex items-center gap-1 active:scale-95"><i data-lucide="check" className="w-3.5 h-3.5"></i>デフォルト</button>
-                                <button onClick={() => { if(confirm("リセット？")) { setCalVerticalShift(userDefaults.verticalShift); setCalSideMargin(userDefaults.sideMargin); setCalBottomPadding(userDefaults.bottomPadding); setBgScale(userDefaults.bgScale); setBgOffset(userDefaults.bgOffset); saveSettings(userDefaults); } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 transition-all flex items-center gap-1 active:scale-95"><i data-lucide="refresh-cw" className="w-3.5 h-3.5"></i>リセット</button>
+                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold transition-all flex items-center gap-1 active:scale-95">
+                                    <i data-lucide="check" className="w-3.5 h-3.5"></i>デフォルト
+                                </button>
+                                <button onClick={() => {
+                                    if(confirm("リセットしますか？")) {
+                                        setCalVerticalShift(userDefaults.verticalShift); setCalSideMargin(userDefaults.sideMargin);
+                                        setCalBottomPadding(userDefaults.bottomPadding); setBgScale(userDefaults.bgScale);
+                                        setBgOffset(userDefaults.bgOffset); saveSettings(userDefaults);
+                                    }
+                                }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 transition-all flex items-center gap-1 active:scale-95">
+                                    <i data-lucide="refresh-cw" className="w-3.5 h-3.5"></i>リセット
+                                </button>
                             </div>
                         </div>
+
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700 text-white"><label className="text-[14px] text-zinc-500 font-bold">年</label><input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold"/></div>
-                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700 text-white"><label className="text-[14px] text-zinc-500 font-bold">月</label><select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold">{Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}</select></div>
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700">
+                                <label className="text-[14px] text-zinc-500 font-bold">年</label>
+                                <input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold text-white"/>
+                            </div>
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700">
+                                <label className="text-[14px] text-zinc-500 font-bold">月</label>
+                                <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold text-white">
+                                    {Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}
+                                </select>
+                            </div>
                         </div>
+
+                        {/* ここに overflow-hidden と w-full を追加し、内部のはみ出しを防止 */}
                         <div className="bg-black/30 p-4 rounded-2xl border border-zinc-800 space-y-3 w-full overflow-hidden">
                             <Slider label="上下位置" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => { setCalVerticalShift(userDefaults.verticalShift); }} />
                             <Slider label="左右余白" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => { setCalSideMargin(userDefaults.sideMargin); }} />
@@ -334,10 +394,16 @@
                         </div>
                     </div>
 
-                    {/* プレビュー */}
-                    <div className="flex flex-col items-center w-full max-w-[416px]">
+                    {/* 右側: プレビューエリア - order-2 で常に下に表示 */}
+                    <div className="flex flex-col items-center w-full max-w-[416px] order-2">
+                        {/* レスポンシブで縮小するためのラッパー */}
                         <div style={{ height: `${WATCH_HEIGHT * previewScale}px`, width: `${WATCH_WIDTH * previewScale}px` }} className="relative mb-4">
-                            <div className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]" style={{ transform: `scale(${previewScale})` }} onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }} onMouseLeave={() => { setIsDragging(false); setInitialDist(null); }} onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }}>
+                            <div 
+                                className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]"
+                                style={{ transform: `scale(${previewScale})` }}
+                                onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={handleEnd} onMouseLeave={handleEnd}
+                                onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
+                            >
                                 <div className="absolute -inset-4 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
                                 <div className="relative p-2 bg-gradient-to-b from-zinc-700 to-zinc-900 rounded-[64px] shadow-2xl overflow-hidden w-full h-full">
                                     <div className="relative bg-black rounded-[56px] overflow-hidden border-[6px] border-zinc-900 shadow-inner w-full h-full">
@@ -347,48 +413,39 @@
                             </div>
                         </div>
 
-                        {/* 画像選択ボタンの仕組みをオーバーレイ方式に変更 */}
+                        {/* ボタンエリア */}
                         <div className="flex gap-3 w-full px-2 sm:px-0">
-                            <div className="relative flex-1 active:scale-95 transition-all">
-                                <div className="flex h-full items-center justify-center gap-2 bg-zinc-800 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg text-zinc-300 pointer-events-none">
-                                    <span>画像を選択</span>
-                                </div>
-                                <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                    onChange={handleImageUpload} 
-                                    onClick={(e) => { e.target.value = null; }}
-                                />
-                            </div>
-                            <button onClick={downloadImage} className="flex-1 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all">画像を作成する</button>
+                            <button onClick={() => fileInputRef.current.click()} className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg active:scale-95 transition-all">
+                                <span className="text-zinc-300">画像を選択</span>
+                            </button>
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+
+                            <button onClick={downloadImage} className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all">
+                                <span>画像を作成する</span>
+                            </button>
                         </div>
                     </div>
-
-                    {/* 履歴セクション */}
-                    {history.length > 0 && (
-                        <div className="w-full max-w-[416px] space-y-3">
-                            <h2 className="text-[14px] font-bold text-zinc-400 flex items-center gap-2"><i data-lucide="history" className="w-4 h-4"></i>作成履歴 (タップで復元)</h2>
-                            <div className="flex gap-3 overflow-x-auto pb-4 snap-x hide-scrollbar">
-                                {history.map(item => (
-                                    <div key={item.id} className="relative flex-shrink-0 w-[80px] snap-start group cursor-pointer" onClick={() => restoreFromHistory(item)}>
-                                        <img src={item.thumbnail} className="w-full rounded-xl border-2 border-zinc-800 hover:border-blue-500 transition-colors shadow-lg" />
-                                        <button onClick={(e) => deleteHistory(e, item.id)} className="absolute -top-1 -right-1 bg-red-500 rounded-full p-1 shadow-md"><i data-lucide="x" className="w-3 h-3 text-white"></i></button>
-                                        <div className="text-[10px] text-center mt-1 text-zinc-500 font-bold">{item.year}/{item.month}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 保存用モーダル */}
-                    {modalImage && (
+                    
+                    {/* 画像保存用モーダル (長押しで保存してもらう画面) */}
+                    {generatedImage && (
                         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 touch-none">
-                            <p className="text-white mb-6 font-bold text-[16px] text-center leading-relaxed">画像を長押しして<br />「"写真"に保存」を選択してください</p>
-                            <img src={modalImage.url} className="max-h-[60vh] rounded-[56px] border-[6px] border-zinc-800 shadow-2xl pointer-events-auto" />
-                            <button onClick={() => setModalImage(null)} className="mt-8 px-8 py-3 bg-zinc-800 rounded-full font-bold text-white border border-zinc-700 active:scale-95 transition-all">閉じる</button>
+                            <p className="text-white mb-6 font-bold text-[16px] text-center leading-relaxed">
+                                画像を長押しして<br />「"写真"に保存」を選択してください
+                            </p>
+                            <img 
+                                src={generatedImage} 
+                                alt="Watch Calendar" 
+                                className="max-h-[60vh] rounded-[56px] border-[6px] border-zinc-800 shadow-2xl pointer-events-auto" 
+                            />
+                            <button 
+                                onClick={() => setGeneratedImage(null)}
+                                className="mt-8 px-8 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-full font-bold text-white transition-all border border-zinc-700 active:scale-95"
+                            >
+                                閉じる
+                            </button>
                         </div>
                     )}
+
                 </div>
             );
         };
