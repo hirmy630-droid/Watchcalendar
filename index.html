@@ -196,8 +196,8 @@
                     const ctx = canvas.getContext('2d');
                     ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, WATCH_WIDTH, WATCH_HEIGHT);
                     const drawText = () => {
-                        const clockLimit = 180, precipLimit = 440, sideMargin = calSideMargin, drawWidth = WATCH_WIDTH - (sideMargin * 2);
-                        const safeBottom = precipLimit - calBottomPadding, areaHeight = safeBottom - clockLimit;
+                        const clockLimit = 180, sideMargin = calSideMargin, drawWidth = WATCH_WIDTH - (sideMargin * 2);
+                        const safeBottom = 440 - calBottomPadding, areaHeight = safeBottom - clockLimit;
                         const rowHeight = (areaHeight / (weeks.length + 1)) * calContentScale, totalHeight = rowHeight * (weeks.length + 1);
                         const startY = clockLimit + (areaHeight - totalHeight) / 2 + calVerticalShift;
                         
@@ -205,19 +205,28 @@
 
                         if (showComps) {
                             ctx.textAlign = 'right'; ctx.fillStyle = 'white';
-                            // プレビュー右上のモック表示
                             ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
                             ctx.font = `300 110px ${FONT_NAME}`; ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
                             
-                            const topGap = startY - clockLimit, bGuideY = (startY + totalHeight) + topGap;
+                            // 固定ガイドの位置
+                            const fixedTopGuide = 197; 
+                            const fixedBottomGuide = 433; 
+                            const additionalGuide = fixedBottomGuide - 38; // 395px (目安の線)
+                            
                             ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)'; ctx.setLineDash([5, 5]); ctx.beginPath();
-                            ctx.moveTo(0, clockLimit); ctx.lineTo(WATCH_WIDTH, clockLimit); ctx.moveTo(0, bGuideY); ctx.lineTo(WATCH_WIDTH, bGuideY); ctx.stroke();
-                            ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
+                            ctx.moveTo(0, fixedTopGuide); ctx.lineTo(WATCH_WIDTH, fixedTopGuide); 
+                            ctx.moveTo(0, fixedBottomGuide); ctx.lineTo(WATCH_WIDTH, fixedBottomGuide); 
+                            ctx.moveTo(0, additionalGuide); ctx.lineTo(WATCH_WIDTH, additionalGuide);
+                            ctx.stroke();
+                            
+                            ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; 
+                            ctx.textBaseline = 'alphabetic'; 
+                            // 「降水確率」の下端を下の点線から3ピクセル上に配置
+                            ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, fixedBottomGuide - 3);
                         }
                         
                         // --- 左上の月表示 ---
                         ctx.fillStyle = 'white'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; 
-                        // サイズ49、垂直位置-9を維持し、水平位置を左にさらに1ピクセル移動（14から13へ）
                         ctx.font = `500 ${Math.max(14, Math.floor(49 * calContentScale))}px ${FONT_NAME}`;
                         ctx.fillText(`${month}月`, sideMargin + 13, clockLimit + calVerticalShift - 9);
                         
