@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { 
-            font-family: 'Helvetica-Light', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; 
+            font-family: 'Helvetica', 'Arial', sans-serif; 
             overscroll-behavior-y: contain;
         }
         input[type="range"]::-webkit-slider-thumb {
@@ -25,6 +25,9 @@
             border-radius: 50%;
             border: 2px solid white;
         }
+        /* スクロールバーを非表示にしつつスクロール可能にする */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-zinc-950 text-white min-h-screen">
@@ -36,7 +39,7 @@
         const SYSTEM_DEFAULTS = {
             verticalShift: 8,
             sideMargin: 27,
-            bottomPadding: 43,
+            bottomPadding: 43, // 40から43に修正
             contentScale: 0.98,
             bgScale: 1.2,
             bgOffset: { x: -95, y: -135 }
@@ -83,7 +86,7 @@
 
             const WATCH_WIDTH = 416;
             const WATCH_HEIGHT = 496;
-            const FONT_NAME = "Helvetica-Light";
+            const FONT_NAME = "Helvetica";
 
             useEffect(() => {
                 const handleResize = () => {
@@ -218,19 +221,20 @@
                             ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
                         }
                         
-                        // 月ラベル
+                        // 月ラベル (1ポイント小さく: 52)
                         ctx.fillStyle = 'white'; ctx.font = `500 ${Math.max(14, Math.floor(52 * calContentScale))}px ${FONT_NAME}`;
                         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(`${month}月`, sideMargin + 10, clockLimit + calVerticalShift - 11);
                         
                         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const colW = drawWidth / 7; const days = ['日', '月', '火', '水', '木', '金', '土'];
                         
-                        // 曜日ラベル
+                        // 曜日ラベル (1ポイント大きく: 24)
                         const hFontSize = Math.max(14, Math.floor(24 * calContentScale)); ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
                         const hY = startY + (rowHeight * 0.5); days.forEach((d, i) => { ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); });
                         
-                        const lY = hY + (hFontSize / 2) + 2; ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
+                        // 線の位置調整 (曜日から3px下げて、間隔を1px広げる)
+                        const lY = hY + (hFontSize / 2) + 3; ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
                         
-                        // 日付フォント
+                        // 日付フォント (1ポイント大きく: 32)
                         ctx.font = `400 ${Math.max(14, Math.floor(32 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
@@ -311,7 +315,7 @@
                             </div>
                         </div>
 
-                        {/* iPhoneで確実に開く画像選択ボタンの仕組み（オーバーレイ方式） */}
+                        {/* iPhone用画像選択ボタン（オーバーレイ方式） */}
                         <div className="flex gap-3 w-full px-2 sm:px-0">
                             <label className="relative flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg text-zinc-300 cursor-pointer active:scale-95 transition-all overflow-hidden">
                                 <span>画像を選択</span>
