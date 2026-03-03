@@ -13,19 +13,18 @@
     <style>
         body { 
             font-family: 'Helvetica', 'Arial', sans-serif; 
-            overscroll-behavior-y: contain;
+            overscroll-behavior-y: contain; /* iPhoneでの引っ張り更新を防止 */
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             background: #3b82f6;
             cursor: pointer;
             border-radius: 50%;
             border: 2px solid white;
         }
-        /* スクロールバーを非表示にしつつスクロール可能にする */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -36,7 +35,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
-        // --- 現在の最適設定をシステムのデフォルト値として定義 ---
+        // --- システムデフォルト設定 ---
         const SYSTEM_DEFAULTS = {
             verticalShift: 8,
             sideMargin: 27,
@@ -44,8 +43,8 @@
             contentScale: 0.98,
             bgScale: 1.2,
             bgOffset: { x: -95, y: -135 },
-            monthPosX: 40,  // 左側配置 (sideMargin 27 + 13px)
-            monthPosY: 184  // 179から5ピクセル下に移動
+            monthPosX: 40,
+            monthPosY: 184  // 前回の調整（179から5px下）をデフォルトに
         };
 
         const Slider = ({ label, value, min, max, step = 1, onChange, onReset, color = "blue" }) => (
@@ -68,7 +67,6 @@
         const App = () => {
             const STORAGE_KEY = 'watch_calendar_state_v4';
             const DEFAULTS_KEY = 'watch_calendar_user_defaults_v4';
-            
             const canvasRef = useRef(null);
 
             const [year, setYear] = useState(new Date().getFullYear());
@@ -152,7 +150,7 @@
                 reader.onload = (ev) => {
                     const img = new Image();
                     img.onload = () => {
-                        const MAX_SIZE = 1000;
+                        const MAX_SIZE = 1200;
                         let width = img.width;
                         let height = img.height;
                         if (width > height && width > MAX_SIZE) {
@@ -164,7 +162,7 @@
                         canvas.width = width; canvas.height = height;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
-                        const compressedData = canvas.toDataURL('image/jpeg', 0.8);
+                        const compressedData = canvas.toDataURL('image/jpeg', 0.85);
                         setBgImage(compressedData);
                         saveSettings({ bgImage: compressedData });
                     };
@@ -283,28 +281,47 @@
                 renderCanvas(true);
             };
 
+            // ドラッグ・ピンチ操作の共通処理
             const handleStart = (e) => {
-                if (!bgImage) return; const touches = e.touches;
-                if (touches && touches.length === 2) { setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)); setIsDragging(false); }
-                else { const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; setIsDragging(true); setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y }); }
+                if (!bgImage) return; 
+                const touches = e.touches;
+                if (touches && touches.length === 2) { 
+                    setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)); 
+                    setIsDragging(false); 
+                } else { 
+                    const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; 
+                    const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; 
+                    setIsDragging(true); 
+                    setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y }); 
+                }
             };
 
             const handleMove = (e) => {
-                if (!bgImage) return; const touches = e.touches;
-                if (touches && touches.length === 2) { if (initialDist === null) return; const nd = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); const r = nd / initialDist; setBgScale(s => Math.min(Math.max(0.1, s * r), 5)); setInitialDist(nd); }
-                else if (isDragging) { const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y }); }
+                if (!bgImage) return; 
+                const touches = e.touches;
+                if (touches && touches.length === 2) { 
+                    if (initialDist === null) return; 
+                    const nd = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); 
+                    const r = nd / initialDist; 
+                    setBgScale(s => Math.min(Math.max(0.1, s * r), 5)); 
+                    setInitialDist(nd); 
+                } else if (isDragging) { 
+                    const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; 
+                    const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; 
+                    setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y }); 
+                }
             };
 
             useEffect(() => { if(window.lucide) window.lucide.createIcons(); }, [bgImage, generatedImage]);
 
             return (
-                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col items-center gap-6 text-white">
+                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col items-center gap-6 text-white pb-20">
                     <div className="bg-zinc-900 p-5 sm:p-6 rounded-3xl border border-zinc-800 shadow-2xl w-full max-w-[416px] space-y-5">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                             <div className="flex items-center gap-2"><i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i><h1 className="text-[16px] font-bold">Watch calendar</h1></div>
                             <div className="flex gap-2">
-                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold active:scale-95 transition-all"><i data-lucide="check" className="w-3.5 h-3.5 inline mr-1"></i>デフォルト</button>
-                                <button onClick={() => { if(confirm("リセット？")) { 
+                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold active:scale-95 transition-all">デフォルト</button>
+                                <button onClick={() => { if(confirm("設定をリセットしますか？")) { 
                                     setCalVerticalShift(SYSTEM_DEFAULTS.verticalShift); 
                                     setCalSideMargin(SYSTEM_DEFAULTS.sideMargin); 
                                     setCalBottomPadding(SYSTEM_DEFAULTS.bottomPadding); 
@@ -313,7 +330,7 @@
                                     setMonthPosX(SYSTEM_DEFAULTS.monthPosX); 
                                     setMonthPosY(SYSTEM_DEFAULTS.monthPosY);
                                     saveSettings(SYSTEM_DEFAULTS); 
-                                } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all"><i data-lucide="refresh-cw" className="w-3.5 h-3.5 inline mr-1"></i>リセット</button>
+                                } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all">リセット</button>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -346,9 +363,9 @@
                             </div>
                         </div>
                         <div className="flex gap-3 w-full px-2 sm:px-0">
-                            <label className="relative flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg text-zinc-300 cursor-pointer active:scale-95 transition-all overflow-hidden">
+                            <label className="relative flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg text-zinc-300 cursor-pointer active:scale-95 transition-all overflow-hidden text-center">
                                 <span>画像を選択</span>
-                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" style={{ fontSize: 0 }} onChange={handleImageUpload} onClick={(e) => { e.target.value = null; }} />
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onChange={handleImageUpload} onClick={(e) => { e.target.value = null; }} />
                             </label>
                             <button onClick={downloadImage} className="flex-1 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all text-white">画像を作成する</button>
                         </div>
@@ -356,9 +373,9 @@
 
                     {generatedImage && (
                         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 touch-none">
-                            <p className="text-white mb-6 font-bold text-[16px] text-center leading-relaxed">画像を長押しして<br />「"写真"に保存」を選択してください</p>
+                            <p className="text-white mb-6 font-bold text-[18px] text-center leading-relaxed bg-black/50 p-4 rounded-2xl">画像を長押しして<br />「"写真"に保存」を選択してください</p>
                             <img src={generatedImage} className="max-h-[60vh] max-w-full object-contain rounded-[56px] border-[6px] border-zinc-800 shadow-2xl pointer-events-auto" />
-                            <button onClick={() => setGeneratedImage(null)} className="mt-8 px-8 py-3 bg-zinc-800 rounded-full font-bold text-white border border-zinc-700 active:scale-95 transition-all">閉じる</button>
+                            <button onClick={() => setGeneratedImage(null)} className="mt-8 px-10 py-4 bg-zinc-800 rounded-full font-bold text-white border border-zinc-700 active:scale-95 transition-all">閉じる</button>
                         </div>
                     )}
                 </div>
