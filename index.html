@@ -39,7 +39,7 @@
         const SYSTEM_DEFAULTS = {
             verticalShift: 8,
             sideMargin: 27,
-            bottomPadding: 43, // 40から43に修正
+            bottomPadding: 43,
             contentScale: 0.98,
             bgScale: 1.2,
             bgOffset: { x: -95, y: -135 }
@@ -129,7 +129,6 @@
                 const newD = { verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding, contentScale: calContentScale, bgScale, bgOffset };
                 localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newD));
                 setUserDefaults(newD);
-                alert("現在の設定を初期値に保存しました");
             };
 
             const handleImageUpload = (e) => {
@@ -143,23 +142,16 @@
                         const MAX_SIZE = 1000;
                         let width = img.width;
                         let height = img.height;
-
                         if (width > height && width > MAX_SIZE) {
-                            height *= MAX_SIZE / width;
-                            width = MAX_SIZE;
+                            height *= MAX_SIZE / width; width = MAX_SIZE;
                         } else if (height > MAX_SIZE) {
-                            width *= MAX_SIZE / height;
-                            height = MAX_SIZE;
+                            width *= MAX_SIZE / height; height = MAX_SIZE;
                         }
-
                         const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
+                        canvas.width = width; canvas.height = height;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
-
                         const compressedData = canvas.toDataURL('image/jpeg', 0.8);
-                        
                         setBgImage(compressedData);
                         saveSettings({ bgImage: compressedData });
                     };
@@ -211,39 +203,93 @@
                         
                         ctx.textBaseline = 'alphabetic';
 
+                        // 実際の「今日」の情報
+                        const realNow = new Date();
+                        const realY = realNow.getFullYear();
+                        const realM = realNow.getMonth() + 1;
+                        const realD = realNow.getDate();
+                        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+                        // 左上ヘッダー用の日付（設定している年月に連動）
+                        const isCurrentMonth = (year === realY && month === realM);
+                        const headerDay = isCurrentMonth ? realD : 1; 
+                        const headerDateObj = new Date(year, month - 1, headerDay);
+                        const headerDayName = dayNames[headerDateObj.getDay()];
+
                         if (showComps) {
                             ctx.textAlign = 'right'; ctx.fillStyle = 'white';
-                            ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
+                            const complicationLabel = `${realM}/${realD}(${dayNames[realNow.getDay()]})`;
+                            ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText(complicationLabel, WATCH_WIDTH - 25, 70);
                             ctx.font = `300 110px ${FONT_NAME}`; ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
+                            
                             const topGap = startY - clockLimit, bGuideY = (startY + totalHeight) + topGap;
                             ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)'; ctx.setLineDash([5, 5]); ctx.beginPath();
                             ctx.moveTo(0, clockLimit); ctx.lineTo(WATCH_WIDTH, clockLimit); ctx.moveTo(0, bGuideY); ctx.lineTo(WATCH_WIDTH, bGuideY); ctx.stroke();
                             ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
                         }
                         
-                        // 月ラベル (1ポイント小さく: 52)
-                        ctx.fillStyle = 'white'; ctx.font = `500 ${Math.max(14, Math.floor(52 * calContentScale))}px ${FONT_NAME}`;
-                        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(`${month}月`, sideMargin + 10, clockLimit + calVerticalShift - 11);
+                        // --- 左上の日付表示 ---
+                        const dateText = `${month}/${headerDay}`;
+                        const dayText = ` (${headerDayName})`;
+                        ctx.fillStyle = 'white'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; 
                         
-                        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const colW = drawWidth / 7; const days = ['日', '月', '火', '水', '木', '金', '土'];
+                        const dateBaseY = clockLimit + calVerticalShift - 9; // 2px下げ
                         
-                        // 曜日ラベル (1ポイント大きく: 24)
-                        const hFontSize = Math.max(14, Math.floor(24 * calContentScale)); ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
-                        const hY = startY + (rowHeight * 0.5); days.forEach((d, i) => { ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); });
+                        ctx.font = `500 ${Math.max(14, Math.floor(44 * calContentScale))}px ${FONT_NAME}`;
+                        ctx.fillText(dateText, sideMargin, dateBaseY);
                         
-                        // 線の位置調整 (曜日から3px下げて、間隔を1px広げる)
+                        const dateWidth = ctx.measureText(dateText).width;
+                        ctx.font = `500 ${Math.max(14, Math.floor(34 * calContentScale))}px ${FONT_NAME}`;
+                        const dayYOffset = Math.floor(6 * calContentScale); // 6px上げ
+                        ctx.fillText(dayText, sideMargin + dateWidth, dateBaseY - dayYOffset);
+                        
+                        // --- カレンダー本体 ---
+                        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; 
+                        const colW = drawWidth / 7; 
+                        const daysHead = ['日', '月', '火', '水', '木', '金', '土'];
+                        
+                        const hFontSize = Math.max(14, Math.floor(24 * calContentScale)); 
+                        ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
+                        const hY = startY + (rowHeight * 0.5); 
+                        daysHead.forEach((d, i) => { 
+                            ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF'; 
+                            ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); 
+                        });
+                        
                         const lY = hY + (hFontSize / 2) + 3; ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
                         
-                        // 日付フォント (1ポイント大きく: 32)
                         ctx.font = `400 ${Math.max(14, Math.floor(32 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
-                            week.forEach((day, ci) => { if (!day) return; ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY); });
+                            week.forEach((day, ci) => { 
+                                if (!day) return; 
+
+                                // 今日をハイライト（不透明度を 0.25 -> 0.35 に変更して明るく）
+                                if (isCurrentMonth && day === realD) {
+                                    ctx.save();
+                                    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                                    ctx.beginPath();
+                                    const radius = Math.min(colW, rowHeight) * 0.42;
+                                    ctx.arc(sideMargin + ci * colW + colW / 2, rY, radius, 0, Math.PI * 2);
+                                    ctx.fill();
+                                    ctx.restore();
+                                }
+
+                                ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF';
+                                ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY); 
+                            });
                         });
                         resolve();
                     };
-                    if (bgImage) { const img = new Image(); img.src = bgImage; img.onload = () => { const dW = img.width * bgScale, dH = img.height * bgScale; ctx.save(); ctx.drawImage(img, (WATCH_WIDTH - dW) / 2 + bgOffset.x, (WATCH_HEIGHT - dH) / 2 + bgOffset.y, dW, dH); ctx.restore(); drawText(); }; }
-                    else { drawText(); }
+                    if (bgImage) {
+                        const img = new Image(); img.src = bgImage;
+                        img.onload = () => {
+                            const dW = img.width * bgScale, dH = img.height * bgScale;
+                            ctx.save();
+                            ctx.drawImage(img, (WATCH_WIDTH - dW) / 2 + bgOffset.x, (WATCH_HEIGHT - dH) / 2 + bgOffset.y, dW, dH);
+                            ctx.restore(); drawText();
+                        };
+                    } else { drawText(); }
                 });
             };
 
@@ -259,53 +305,42 @@
             const handleStart = (e) => {
                 if (!bgImage) return; const touches = e.touches;
                 if (touches && touches.length === 2) { setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)); setIsDragging(false); }
-                else { 
-                    const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; 
-                    const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; 
-                    setIsDragging(true); setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y }); 
-                }
+                else { const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; setIsDragging(true); setDragStart({ x: cx - bgOffset.x, y: cy - bgOffset.y }); }
             };
 
             const handleMove = (e) => {
                 if (!bgImage) return; const touches = e.touches;
-                if (touches && touches.length === 2) { 
-                    if (initialDist === null) return; const nd = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); const r = nd / initialDist; setBgScale(s => Math.min(Math.max(0.1, s * r), 5)); setInitialDist(nd); 
-                } else if (isDragging) { 
-                    const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; 
-                    const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; 
-                    setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y }); 
-                }
+                if (touches && touches.length === 2) { if (initialDist === null) return; const nd = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY); const r = nd / initialDist; setBgScale(s => Math.min(Math.max(0.1, s * r), 5)); setInitialDist(nd); }
+                else if (isDragging) { const cx = (touches ? touches[0].clientX : e.clientX) / previewScale; const cy = (touches ? touches[0].clientY : e.clientY) / previewScale; setBgOffset({ x: cx - dragStart.x, y: cy - dragStart.y }); }
             };
 
             useEffect(() => { if(window.lucide) window.lucide.createIcons(); }, [bgImage, generatedImage]);
 
             return (
-                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col items-center gap-6">
-                    {/* 設定パネル */}
+                <div className="p-4 w-full max-w-[1000px] mx-auto flex flex-col items-center gap-6 text-white">
                     <div className="bg-zinc-900 p-5 sm:p-6 rounded-3xl border border-zinc-800 shadow-2xl w-full max-w-[416px] space-y-5">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-                            <div className="flex items-center gap-2 text-white"><i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i><h1 className="text-[16px] font-bold">Watch calendar</h1></div>
+                            <div className="flex items-center gap-2"><i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i><h1 className="text-[16px] font-bold">Watch calendar</h1></div>
                             <div className="flex gap-2">
-                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold transition-all flex items-center gap-1 active:scale-95"><i data-lucide="check" className="w-3.5 h-3.5"></i>デフォルト</button>
-                                <button onClick={() => { if(confirm("リセット？")) { setCalVerticalShift(userDefaults.verticalShift); setCalSideMargin(userDefaults.sideMargin); setCalBottomPadding(userDefaults.bottomPadding); setBgScale(userDefaults.bgScale); setBgOffset(userDefaults.bgOffset); saveSettings(userDefaults); } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 transition-all flex items-center gap-1 active:scale-95"><i data-lucide="refresh-cw" className="w-3.5 h-3.5"></i>リセット</button>
+                                <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold active:scale-95 transition-all"><i data-lucide="check" className="w-3.5 h-3.5 inline mr-1"></i>デフォルト</button>
+                                <button onClick={() => { if(confirm("リセット？")) { setCalVerticalShift(userDefaults.verticalShift); setCalSideMargin(userDefaults.sideMargin); setCalBottomPadding(userDefaults.bottomPadding); setBgScale(userDefaults.bgScale); setBgOffset(userDefaults.bgOffset); saveSettings(userDefaults); } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all"><i data-lucide="refresh-cw" className="w-3.5 h-3.5 inline mr-1"></i>リセット</button>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700 text-white"><label className="text-[14px] text-zinc-500 font-bold">年</label><input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold"/></div>
-                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700 text-white"><label className="text-[14px] text-zinc-500 font-bold">月</label><select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold">{Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}</select></div>
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700"><label className="text-[14px] text-zinc-500 font-bold">年</label><input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold"/></div>
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700"><label className="text-[14px] text-zinc-500 font-bold">月</label><select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold">{Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}</select></div>
                         </div>
-                        <div className="bg-black/30 p-4 rounded-2xl border border-zinc-800 space-y-3 w-full overflow-hidden">
-                            <Slider label="上下位置" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => { setCalVerticalShift(userDefaults.verticalShift); }} />
-                            <Slider label="左右余白" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => { setCalSideMargin(userDefaults.sideMargin); }} />
-                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => { setCalBottomPadding(userDefaults.bottomPadding); }} color="red" />
-                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => { setBgScale(userDefaults.bgScale); }} color="zinc" />}
+                        <div className="bg-black/30 p-4 rounded-2xl border border-zinc-800 space-y-3">
+                            <Slider label="上下位置" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => setCalVerticalShift(userDefaults.verticalShift)} />
+                            <Slider label="左右余白" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => setCalSideMargin(userDefaults.sideMargin)} />
+                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => setCalBottomPadding(userDefaults.bottomPadding)} color="red" />
+                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => setBgScale(userDefaults.bgScale)} color="zinc" />}
                         </div>
                     </div>
 
-                    {/* プレビュー */}
                     <div className="flex flex-col items-center w-full max-w-[416px]">
                         <div style={{ height: `${WATCH_HEIGHT * previewScale}px`, width: `${WATCH_WIDTH * previewScale}px` }} className="relative mb-4">
-                            <div className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]" style={{ transform: `scale(${previewScale})` }} onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }} onMouseLeave={() => { setIsDragging(false); setInitialDist(null); }} onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }}>
+                            <div className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]" style={{ transform: `scale(${previewScale})` }} onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }} onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }}>
                                 <div className="absolute -inset-4 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
                                 <div className="relative p-2 bg-gradient-to-b from-zinc-700 to-zinc-900 rounded-[64px] shadow-2xl overflow-hidden w-full h-full">
                                     <div className="relative bg-black rounded-[56px] overflow-hidden border-[6px] border-zinc-900 shadow-inner w-full h-full">
@@ -314,25 +349,15 @@
                                 </div>
                             </div>
                         </div>
-
-                        {/* iPhone用画像選択ボタン（オーバーレイ方式） */}
                         <div className="flex gap-3 w-full px-2 sm:px-0">
                             <label className="relative flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl border border-zinc-700 text-[14px] font-bold shadow-lg text-zinc-300 cursor-pointer active:scale-95 transition-all overflow-hidden">
                                 <span>画像を選択</span>
-                                <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                    style={{ fontSize: 0 }}
-                                    onChange={handleImageUpload} 
-                                    onClick={(e) => { e.target.value = null; }}
-                                />
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" style={{ fontSize: 0 }} onChange={handleImageUpload} onClick={(e) => { e.target.value = null; }} />
                             </label>
                             <button onClick={downloadImage} className="flex-1 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all text-white">画像を作成する</button>
                         </div>
                     </div>
 
-                    {/* 保存用モーダル */}
                     {generatedImage && (
                         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 touch-none">
                             <p className="text-white mb-6 font-bold text-[16px] text-center leading-relaxed">画像を長押しして<br />「"写真"に保存」を選択してください</p>
