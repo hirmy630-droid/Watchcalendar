@@ -208,10 +208,9 @@
                             ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
                             ctx.font = `300 110px ${FONT_NAME}`; ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
                             
-                            // 固定ガイドの位置
                             const fixedTopGuide = 197; 
                             const fixedBottomGuide = 433; 
-                            const additionalGuide = fixedBottomGuide - 38; // 395px (目安の線)
+                            const additionalGuide = fixedBottomGuide - 38; 
                             
                             ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)'; ctx.setLineDash([5, 5]); ctx.beginPath();
                             ctx.moveTo(0, fixedTopGuide); ctx.lineTo(WATCH_WIDTH, fixedTopGuide); 
@@ -221,7 +220,6 @@
                             
                             ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; 
                             ctx.textBaseline = 'alphabetic'; 
-                            // 「降水確率」の下端を下の点線から3ピクセル上に配置
                             ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, fixedBottomGuide - 3);
                         }
                         
@@ -243,7 +241,9 @@
                             ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); 
                         });
                         
-                        const lY = hY + (hFontSize / 2) + 3; ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
+                        // 曜日の下にあるグレーの横線を1ピクセル下に移動 (-1 -> +0)
+                        const lY = hY + (hFontSize / 2); 
+                        ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
                         
                         ctx.font = `400 ${Math.max(14, Math.floor(32 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
