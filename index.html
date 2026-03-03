@@ -203,23 +203,10 @@
                         
                         ctx.textBaseline = 'alphabetic';
 
-                        // 実際の「今日」の情報
-                        const realNow = new Date();
-                        const realY = realNow.getFullYear();
-                        const realM = realNow.getMonth() + 1;
-                        const realD = realNow.getDate();
-                        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-
-                        // 左上ヘッダー用の日付（設定している年月に連動）
-                        const isCurrentMonth = (year === realY && month === realM);
-                        const headerDay = isCurrentMonth ? realD : 1; 
-                        const headerDateObj = new Date(year, month - 1, headerDay);
-                        const headerDayName = dayNames[headerDateObj.getDay()];
-
                         if (showComps) {
                             ctx.textAlign = 'right'; ctx.fillStyle = 'white';
-                            const complicationLabel = `${realM}/${realD}(${dayNames[realNow.getDay()]})`;
-                            ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText(complicationLabel, WATCH_WIDTH - 25, 70);
+                            // プレビュー右上のモック表示
+                            ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
                             ctx.font = `300 110px ${FONT_NAME}`; ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
                             
                             const topGap = startY - clockLimit, bGuideY = (startY + totalHeight) + topGap;
@@ -228,20 +215,11 @@
                             ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
                         }
                         
-                        // --- 左上の日付表示 ---
-                        const dateText = `${month}/${headerDay}`;
-                        const dayText = ` (${headerDayName})`;
+                        // --- 左上の月表示 ---
                         ctx.fillStyle = 'white'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; 
-                        
-                        const dateBaseY = clockLimit + calVerticalShift - 9; // 2px下げ
-                        
-                        ctx.font = `500 ${Math.max(14, Math.floor(44 * calContentScale))}px ${FONT_NAME}`;
-                        ctx.fillText(dateText, sideMargin, dateBaseY);
-                        
-                        const dateWidth = ctx.measureText(dateText).width;
-                        ctx.font = `500 ${Math.max(14, Math.floor(34 * calContentScale))}px ${FONT_NAME}`;
-                        const dayYOffset = Math.floor(6 * calContentScale); // 6px上げ
-                        ctx.fillText(dayText, sideMargin + dateWidth, dateBaseY - dayYOffset);
+                        // サイズ49、垂直位置-9を維持し、水平位置を左にさらに1ピクセル移動（14から13へ）
+                        ctx.font = `500 ${Math.max(14, Math.floor(49 * calContentScale))}px ${FONT_NAME}`;
+                        ctx.fillText(`${month}月`, sideMargin + 13, clockLimit + calVerticalShift - 9);
                         
                         // --- カレンダー本体 ---
                         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; 
@@ -263,18 +241,6 @@
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
                             week.forEach((day, ci) => { 
                                 if (!day) return; 
-
-                                // 今日をハイライト（不透明度を 0.25 -> 0.35 に変更して明るく）
-                                if (isCurrentMonth && day === realD) {
-                                    ctx.save();
-                                    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-                                    ctx.beginPath();
-                                    const radius = Math.min(colW, rowHeight) * 0.42;
-                                    ctx.arc(sideMargin + ci * colW + colW / 2, rY, radius, 0, Math.PI * 2);
-                                    ctx.fill();
-                                    ctx.restore();
-                                }
-
                                 ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF';
                                 ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY); 
                             });
