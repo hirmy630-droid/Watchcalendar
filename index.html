@@ -36,13 +36,16 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
+        // --- 現在の最適設定をシステムのデフォルト値として定義 ---
         const SYSTEM_DEFAULTS = {
             verticalShift: 8,
             sideMargin: 27,
             bottomPadding: 43,
             contentScale: 0.98,
             bgScale: 1.2,
-            bgOffset: { x: -95, y: -135 }
+            bgOffset: { x: -95, y: -135 },
+            monthPosX: 40,  // 左側配置 (sideMargin 27 + 13px)
+            monthPosY: 184  // 179から5ピクセル下に移動
         };
 
         const Slider = ({ label, value, min, max, step = 1, onChange, onReset, color = "blue" }) => (
@@ -78,6 +81,9 @@
             const [calBottomPadding, setCalBottomPadding] = useState(SYSTEM_DEFAULTS.bottomPadding);
             const [calSideMargin, setCalSideMargin] = useState(SYSTEM_DEFAULTS.sideMargin);
             const [calContentScale, setCalContentScale] = useState(SYSTEM_DEFAULTS.contentScale);
+            const [monthPosX, setMonthPosX] = useState(SYSTEM_DEFAULTS.monthPosX);
+            const [monthPosY, setMonthPosY] = useState(SYSTEM_DEFAULTS.monthPosY);
+
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
             const [initialDist, setInitialDist] = useState(null);
@@ -112,12 +118,17 @@
                         if (d.calBottomPadding !== undefined) setCalBottomPadding(d.calBottomPadding);
                         if (d.calSideMargin !== undefined) setCalSideMargin(d.calSideMargin);
                         if (d.calContentScale !== undefined) setCalContentScale(d.calContentScale);
+                        if (d.monthPosX !== undefined) setMonthPosX(d.monthPosX);
+                        if (d.monthPosY !== undefined) setMonthPosY(d.monthPosY);
                     } catch(e){}
                 }
             }, []);
 
             const saveSettings = (updates = {}) => {
-                const current = { bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, ...updates };
+                const current = { 
+                    bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, 
+                    calContentScale, monthPosX, monthPosY, ...updates 
+                };
                 try {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
                 } catch (e) {
@@ -126,7 +137,10 @@
             };
 
             const handleSetAsDefault = () => {
-                const newD = { verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding, contentScale: calContentScale, bgScale, bgOffset };
+                const newD = { 
+                    verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding, 
+                    contentScale: calContentScale, bgScale, bgOffset, monthPosX, monthPosY 
+                };
                 localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newD));
                 setUserDefaults(newD);
             };
@@ -134,7 +148,6 @@
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     const img = new Image();
@@ -208,10 +221,7 @@
                             ctx.font = `400 36px ${FONT_NAME}`; ctx.fillText("3/2(月)", WATCH_WIDTH - 25, 70);
                             ctx.font = `300 110px ${FONT_NAME}`; ctx.fillText("2:31", WATCH_WIDTH - 15, clockLimit);
                             
-                            const fixedTopGuide = 197; 
-                            const fixedBottomGuide = 433; 
-                            const additionalGuide = fixedBottomGuide - 38; 
-                            
+                            const fixedTopGuide = 197; const fixedBottomGuide = 433; const additionalGuide = 395; 
                             ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)'; ctx.setLineDash([5, 5]); ctx.beginPath();
                             ctx.moveTo(0, fixedTopGuide); ctx.lineTo(WATCH_WIDTH, fixedTopGuide); 
                             ctx.moveTo(0, fixedBottomGuide); ctx.lineTo(WATCH_WIDTH, fixedBottomGuide); 
@@ -223,16 +233,15 @@
                             ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, fixedBottomGuide - 3);
                         }
                         
-                        // --- 左上の月表示 ---
+                        // --- 月表示 ---
                         ctx.fillStyle = 'white'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; 
                         ctx.font = `500 ${Math.max(14, Math.floor(49 * calContentScale))}px ${FONT_NAME}`;
-                        ctx.fillText(`${month}月`, sideMargin + 13, clockLimit + calVerticalShift - 9);
+                        ctx.fillText(`${month}月`, monthPosX, monthPosY);
                         
                         // --- カレンダー本体 ---
                         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; 
                         const colW = drawWidth / 7; 
                         const daysHead = ['日', '月', '火', '水', '木', '金', '土'];
-                        
                         const hFontSize = Math.max(14, Math.floor(24 * calContentScale)); 
                         ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
                         const hY = startY + (rowHeight * 0.5); 
@@ -240,11 +249,8 @@
                             ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF'; 
                             ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); 
                         });
-                        
-                        // 曜日の下にあるグレーの横線を1ピクセル下に移動 (-1 -> +0)
                         const lY = hY + (hFontSize / 2); 
                         ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
-                        
                         ctx.font = `400 ${Math.max(14, Math.floor(32 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
@@ -268,7 +274,7 @@
                 });
             };
 
-            useEffect(() => { renderCanvas(true); }, [year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale]);
+            useEffect(() => { renderCanvas(true); }, [year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, monthPosX, monthPosY]);
 
             const downloadImage = async () => {
                 await renderCanvas(false);
@@ -298,7 +304,16 @@
                             <div className="flex items-center gap-2"><i data-lucide="settings-2" className="text-blue-400 w-5 h-5"></i><h1 className="text-[16px] font-bold">Watch calendar</h1></div>
                             <div className="flex gap-2">
                                 <button onClick={handleSetAsDefault} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-blue-400 font-bold active:scale-95 transition-all"><i data-lucide="check" className="w-3.5 h-3.5 inline mr-1"></i>デフォルト</button>
-                                <button onClick={() => { if(confirm("リセット？")) { setCalVerticalShift(userDefaults.verticalShift); setCalSideMargin(userDefaults.sideMargin); setCalBottomPadding(userDefaults.bottomPadding); setBgScale(userDefaults.bgScale); setBgOffset(userDefaults.bgOffset); saveSettings(userDefaults); } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all"><i data-lucide="refresh-cw" className="w-3.5 h-3.5 inline mr-1"></i>リセット</button>
+                                <button onClick={() => { if(confirm("リセット？")) { 
+                                    setCalVerticalShift(SYSTEM_DEFAULTS.verticalShift); 
+                                    setCalSideMargin(SYSTEM_DEFAULTS.sideMargin); 
+                                    setCalBottomPadding(SYSTEM_DEFAULTS.bottomPadding); 
+                                    setBgScale(SYSTEM_DEFAULTS.bgScale); 
+                                    setBgOffset(SYSTEM_DEFAULTS.bgOffset); 
+                                    setMonthPosX(SYSTEM_DEFAULTS.monthPosX); 
+                                    setMonthPosY(SYSTEM_DEFAULTS.monthPosY);
+                                    saveSettings(SYSTEM_DEFAULTS); 
+                                } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all"><i data-lucide="refresh-cw" className="w-3.5 h-3.5 inline mr-1"></i>リセット</button>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -306,10 +321,16 @@
                             <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700"><label className="text-[14px] text-zinc-500 font-bold">月</label><select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold">{Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}</select></div>
                         </div>
                         <div className="bg-black/30 p-4 rounded-2xl border border-zinc-800 space-y-3">
-                            <Slider label="上下位置" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => setCalVerticalShift(userDefaults.verticalShift)} />
-                            <Slider label="左右余白" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => setCalSideMargin(userDefaults.sideMargin)} />
-                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => setCalBottomPadding(userDefaults.bottomPadding)} color="red" />
-                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => setBgScale(userDefaults.bgScale)} color="zinc" />}
+                            <Slider label="カレンダー上下" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => setCalVerticalShift(SYSTEM_DEFAULTS.verticalShift)} />
+                            <Slider label="カレンダー左右" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => setCalSideMargin(SYSTEM_DEFAULTS.sideMargin)} />
+                            
+                            <div className="pt-2 border-t border-zinc-800/50 mt-1">
+                                <Slider label="月・横位置" value={monthPosX} min={0} max={416} onChange={(v) => { setMonthPosX(v); saveSettings({ monthPosX: v }); }} onReset={() => setMonthPosX(SYSTEM_DEFAULTS.monthPosX)} color="blue" />
+                                <Slider label="月・縦位置" value={monthPosY} min={0} max={300} onChange={(v) => { setMonthPosY(v); saveSettings({ monthPosY: v }); }} onReset={() => setMonthPosY(SYSTEM_DEFAULTS.monthPosY)} color="blue" />
+                            </div>
+
+                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => setCalBottomPadding(SYSTEM_DEFAULTS.bottomPadding)} color="red" />
+                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => setBgScale(SYSTEM_DEFAULTS.bgScale)} color="zinc" />}
                         </div>
                     </div>
 
