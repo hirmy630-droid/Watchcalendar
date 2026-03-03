@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { 
-            font-family: 'Helvetica', 'Arial', sans-serif; 
+            font-family: 'Helvetica-Light', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; 
             overscroll-behavior-y: contain;
         }
         input[type="range"]::-webkit-slider-thumb {
@@ -83,7 +83,7 @@
 
             const WATCH_WIDTH = 416;
             const WATCH_HEIGHT = 496;
-            const FONT_NAME = "Helvetica";
+            const FONT_NAME = "Helvetica-Light";
 
             useEffect(() => {
                 const handleResize = () => {
@@ -217,13 +217,21 @@
                             ctx.moveTo(0, clockLimit); ctx.lineTo(WATCH_WIDTH, clockLimit); ctx.moveTo(0, bGuideY); ctx.lineTo(WATCH_WIDTH, bGuideY); ctx.stroke();
                             ctx.setLineDash([]); ctx.fillStyle = '#CCC'; ctx.font = `400 32px ${FONT_NAME}`; ctx.fillText(`降水 40%`, WATCH_WIDTH - 25, bGuideY + 15);
                         }
-                        ctx.fillStyle = 'white'; ctx.font = `500 ${Math.max(14, Math.floor(53 * calContentScale))}px ${FONT_NAME}`;
+                        
+                        // 月ラベル
+                        ctx.fillStyle = 'white'; ctx.font = `500 ${Math.max(14, Math.floor(52 * calContentScale))}px ${FONT_NAME}`;
                         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(`${month}月`, sideMargin + 10, clockLimit + calVerticalShift - 11);
+                        
                         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const colW = drawWidth / 7; const days = ['日', '月', '火', '水', '木', '金', '土'];
-                        const hFontSize = Math.max(14, Math.floor(23 * calContentScale)); ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
+                        
+                        // 曜日ラベル
+                        const hFontSize = Math.max(14, Math.floor(24 * calContentScale)); ctx.font = `500 ${hFontSize}px ${FONT_NAME}`;
                         const hY = startY + (rowHeight * 0.5); days.forEach((d, i) => { ctx.fillStyle = i === 0 ? '#FF2D55' : i === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(d, sideMargin + i * colW + colW / 2, hY); });
+                        
                         const lY = hY + (hFontSize / 2) + 2; ctx.strokeStyle = 'silver'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sideMargin, lY); ctx.lineTo(WATCH_WIDTH - sideMargin, lY); ctx.stroke();
-                        ctx.font = `400 ${Math.max(14, Math.floor(31 * calContentScale))}px ${FONT_NAME}`;
+                        
+                        // 日付フォント
+                        ctx.font = `400 ${Math.max(14, Math.floor(32 * calContentScale))}px ${FONT_NAME}`;
                         weeks.forEach((week, ri) => {
                             const rY = startY + (ri + 1) * rowHeight + (rowHeight * 0.5);
                             week.forEach((day, ci) => { if (!day) return; ctx.fillStyle = (ci === 0 || holidays.has(day)) ? '#FF2D55' : ci === 6 ? '#007AFF' : '#FFFFFF'; ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY); });
@@ -244,7 +252,6 @@
                 renderCanvas(true);
             };
 
-            // スマホでのドラッグズレを防止するため、previewScale で割り算して補正
             const handleStart = (e) => {
                 if (!bgImage) return; const touches = e.touches;
                 if (touches && touches.length === 2) { setInitialDist(Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)); setIsDragging(false); }
