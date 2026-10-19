@@ -1,9 +1,9 @@
-/* Watch calendar PWA: 20261019-01. External CDN libraries require network. */
+/* Watch calendar: inline libraries, offline shell, network-first index. */
 'use strict';
 const BASE = new URL('./', self.registration.scope);
 const INDEX = new URL('index.html', BASE).href;
 const PREFIX = 'watch-calendar:' + BASE.pathname + ':';
-const CACHE = PREFIX + '20261019-01';
+const CACHE = PREFIX + '20261019-1124-offline';
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const response = await fetch(INDEX, { cache: 'no-store' });
@@ -29,8 +29,10 @@ self.addEventListener('fetch', event => {
         try {
             const response = await fetch(request, { cache: 'no-store' });
             if (response.ok) {
-                const copy = response.clone();
-                event.waitUntil(caches.open(CACHE).then(cache => cache.put(INDEX, copy)).catch(() => {}));
+                try {
+                    const cache = await caches.open(CACHE);
+                    await cache.put(INDEX, response.clone());
+                } catch (_) {}
             }
             return response;
         } catch (error) {
