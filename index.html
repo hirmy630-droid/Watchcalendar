@@ -35,7 +35,12 @@
 <body class="bg-zinc-950 text-white min-h-screen">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script>
+        if (window.Babel) {
+            Babel.registerPreset('watch-react', { presets: [[Babel.availablePresets.react, { runtime: 'classic' }]] });
+        }
+    </script>
+    <script type="text/babel" data-presets="watch-react">
         const { useState, useEffect, useRef, useMemo } = React;
 
         // --- システムデフォルト設定 ---
@@ -67,10 +72,20 @@
             </div>
         );
 
+        const copyPreview = (target, source) => {
+            const context = target.getContext('2d');
+            context.clearRect(0, 0, source.width, source.height);
+            context.drawImage(source, 0, 0);
+        };
+
         const App = () => {
             const STORAGE_KEY = 'watch_calendar_state_v4';
             const DEFAULTS_KEY = 'watch_calendar_user_defaults_v4';
             const canvasRef = useRef(null);
+            const previewRenderRef = useRef(null);
+            const generatingRef = useRef(false);
+            const uploadRef = useRef(null);
+            const [yearDraft, setYearDraft] = useState(null);
 
             const [year, setYear] = useState(new Date().getFullYear());
             const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -106,8 +121,9 @@
             }, []);
 
             useEffect(() => {
+                try {
                 const savedDefaults = localStorage.getItem(DEFAULTS_KEY);
-                if (savedDefaults) try { setUserDefaults(JSON.parse(savedDefaults)); } catch(e){}
+                if (savedDefaults) try { const d = JSON.parse(savedDefaults); if (d && typeof d === 'object' && !Array.isArray(d)) setUserDefaults({ ...SYSTEM_DEFAULTS, ...d }); } catch(e){}
                 const savedState = localStorage.getItem(STORAGE_KEY);
                 if (savedState) {
                     try {
@@ -123,6 +139,7 @@
                         if (d.monthPosY !== undefined) setMonthPosY(d.monthPosY);
                     } catch(e){}
                 }
+                } catch (error) { console.warn('設定を読み込めませんでした', error); }
             }, []);
 
             const saveSettings = (updates = {}) => {
@@ -142,17 +159,26 @@
                     verticalShift: calVerticalShift, sideMargin: calSideMargin, bottomPadding: calBottomPadding, 
                     contentScale: calContentScale, bgScale, bgOffset, monthPosX, monthPosY 
                 };
-                localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newD));
-                setUserDefaults(newD);
+                try {
+                    localStorage.setItem(DEFAULTS_KEY, JSON.stringify(newD));
+                    setUserDefaults(newD);
+                } catch (error) { alert('デフォルトを保存できませんでした。保存領域を確認してください。'); }
             };
 
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+                const uploadToken = {};
+                uploadRef.current = uploadToken;
+                const failUpload = () => { if (uploadRef.current === uploadToken) alert('画像を読み込めませんでした。別の画像を選択してください。'); };
                 const reader = new FileReader();
+                reader.onerror = failUpload;
                 reader.onload = (ev) => {
                     const img = new Image();
+                    img.onerror = failUpload;
                     img.onload = () => {
+                        if (uploadRef.current !== uploadToken) return;
+                        try {
                         const MAX_SIZE = 1200;
                         let width = img.width;
                         let height = img.height;
@@ -168,6 +194,7 @@
                         const compressedData = canvas.toDataURL('image/jpeg', 0.85);
                         setBgImage(compressedData);
                         saveSettings({ bgImage: compressedData });
+                        } catch (error) { failUpload(); }
                     };
                     img.src = ev.target.result;
                 };
@@ -205,8 +232,12 @@
             }, [year, month]);
 
             const renderCanvas = (showComps = true) => {
-                return new Promise((resolve) => {
-                    const canvas = canvasRef.current;
+                const renderToken = {};
+                if (showComps) previewRenderRef.current = renderToken;
+                return new Promise((resolve, reject) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = WATCH_WIDTH;
+                    canvas.height = WATCH_HEIGHT;
                     const ctx = canvas.getContext('2d');
                     ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, WATCH_WIDTH, WATCH_HEIGHT);
                     const drawText = () => {
@@ -261,27 +292,38 @@
                                 ctx.fillText(day.toString(), sideMargin + ci * colW + colW / 2, rY); 
                             });
                         });
-                        resolve();
+                        if (showComps && previewRenderRef.current === renderToken && canvasRef.current) {
+                            copyPreview(canvasRef.current, canvas);
+                        }
+                        resolve(canvas);
                     };
                     if (bgImage) {
-                        const img = new Image(); img.src = bgImage;
+                        const img = new Image();
+                        img.onerror = () => reject(new Error('背景画像を読み込めませんでした。'));
                         img.onload = () => {
+                            try {
                             const dW = img.width * bgScale, dH = img.height * bgScale;
                             ctx.save();
                             ctx.drawImage(img, (WATCH_WIDTH - dW) / 2 + bgOffset.x, (WATCH_HEIGHT - dH) / 2 + bgOffset.y, dW, dH);
                             ctx.restore(); drawText();
+                            } catch (error) { reject(error); }
                         };
+                        img.src = bgImage;
                     } else { drawText(); }
                 });
             };
 
-            useEffect(() => { renderCanvas(true); }, [year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, monthPosX, monthPosY]);
+            useEffect(() => { renderCanvas(true).catch(error => console.warn('プレビューを描画できませんでした', error)); }, [year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, monthPosX, monthPosY]);
 
             const downloadImage = async () => {
-                await renderCanvas(false);
-                const dataUrl = canvasRef.current.toDataURL('image/png');
-                setGeneratedImage(dataUrl);
-                renderCanvas(true);
+                if (generatingRef.current) return;
+                generatingRef.current = true;
+                try {
+                    const canvas = await renderCanvas(false);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    setGeneratedImage(dataUrl);
+                } catch (error) { alert('画像を作成できませんでした。背景画像を選び直してお試しください。'); }
+                finally { generatingRef.current = false; }
             };
 
             // ドラッグ・ピンチ操作の共通処理
@@ -315,6 +357,11 @@
                 }
             };
 
+            const handleEnd = () => {
+                if (!isDragging && initialDist === null) return;
+                setIsDragging(false); setInitialDist(null); saveSettings();
+            };
+
             useEffect(() => { if(window.lucide) window.lucide.createIcons(); }, [bgImage, generatedImage]);
 
             return (
@@ -332,31 +379,44 @@
                                     setBgOffset(SYSTEM_DEFAULTS.bgOffset); 
                                     setMonthPosX(SYSTEM_DEFAULTS.monthPosX); 
                                     setMonthPosY(SYSTEM_DEFAULTS.monthPosY);
-                                    saveSettings(SYSTEM_DEFAULTS); 
+                                    setCalContentScale(SYSTEM_DEFAULTS.contentScale);
+                                    saveSettings({
+                                        calVerticalShift: SYSTEM_DEFAULTS.verticalShift,
+                                        calSideMargin: SYSTEM_DEFAULTS.sideMargin,
+                                        calBottomPadding: SYSTEM_DEFAULTS.bottomPadding,
+                                        calContentScale: SYSTEM_DEFAULTS.contentScale,
+                                        bgScale: SYSTEM_DEFAULTS.bgScale,
+                                        bgOffset: SYSTEM_DEFAULTS.bgOffset,
+                                        monthPosX: SYSTEM_DEFAULTS.monthPosX,
+                                        monthPosY: SYSTEM_DEFAULTS.monthPosY
+                                    }); 
                                 } }} className="text-[12px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all">リセット</button>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700"><label className="text-[14px] text-zinc-500 font-bold">年</label><input type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold"/></div>
+                            <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700"><label className="text-[14px] text-zinc-500 font-bold">年</label><input type="number" value={yearDraft ?? year} onChange={(e) => {
+                                setYearDraft(e.target.value);
+                                if (e.target.value !== '' && e.target.validity.valid && Number.isFinite(parseInt(e.target.value))) setYear(parseInt(e.target.value));
+                            }} onBlur={() => setYearDraft(null)} className="w-full bg-transparent border-none outline-none text-[14px] font-bold"/></div>
                             <div className="bg-zinc-800 px-3 py-2 rounded-xl flex items-center gap-2 border border-zinc-700"><label className="text-[14px] text-zinc-500 font-bold">月</label><select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="w-full bg-transparent border-none outline-none text-[14px] font-bold">{Array.from({ length: 12 }, (_, i) => (<option key={i + 1} value={i + 1} className="bg-zinc-800">{i + 1}月</option>))}</select></div>
                         </div>
                         <div className="bg-black/30 p-4 rounded-2xl border border-zinc-800 space-y-3">
-                            <Slider label="カレンダー上下" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => setCalVerticalShift(SYSTEM_DEFAULTS.verticalShift)} />
-                            <Slider label="カレンダー左右" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => setCalSideMargin(SYSTEM_DEFAULTS.sideMargin)} />
+                            <Slider label="カレンダー上下" value={calVerticalShift} min={-80} max={80} onChange={(v) => { setCalVerticalShift(v); saveSettings({ calVerticalShift: v }); }} onReset={() => { setCalVerticalShift(userDefaults.verticalShift ?? SYSTEM_DEFAULTS.verticalShift); saveSettings({ calVerticalShift: userDefaults.verticalShift ?? SYSTEM_DEFAULTS.verticalShift }); }} />
+                            <Slider label="カレンダー左右" value={calSideMargin} min={10} max={80} onChange={(v) => { setCalSideMargin(v); saveSettings({ calSideMargin: v }); }} onReset={() => { setCalSideMargin(userDefaults.sideMargin ?? SYSTEM_DEFAULTS.sideMargin); saveSettings({ calSideMargin: userDefaults.sideMargin ?? SYSTEM_DEFAULTS.sideMargin }); }} />
                             
                             <div className="pt-2 border-t border-zinc-800/50 mt-1">
-                                <Slider label="月・横位置" value={monthPosX} min={0} max={416} onChange={(v) => { setMonthPosX(v); saveSettings({ monthPosX: v }); }} onReset={() => setMonthPosX(SYSTEM_DEFAULTS.monthPosX)} color="blue" />
-                                <Slider label="月・縦位置" value={monthPosY} min={0} max={300} onChange={(v) => { setMonthPosY(v); saveSettings({ monthPosY: v }); }} onReset={() => setMonthPosY(SYSTEM_DEFAULTS.monthPosY)} color="blue" />
+                                <Slider label="月・横位置" value={monthPosX} min={0} max={416} onChange={(v) => { setMonthPosX(v); saveSettings({ monthPosX: v }); }} onReset={() => { setMonthPosX(userDefaults.monthPosX ?? SYSTEM_DEFAULTS.monthPosX); saveSettings({ monthPosX: userDefaults.monthPosX ?? SYSTEM_DEFAULTS.monthPosX }); }} color="blue" />
+                                <Slider label="月・縦位置" value={monthPosY} min={0} max={300} onChange={(v) => { setMonthPosY(v); saveSettings({ monthPosY: v }); }} onReset={() => { setMonthPosY(userDefaults.monthPosY ?? SYSTEM_DEFAULTS.monthPosY); saveSettings({ monthPosY: userDefaults.monthPosY ?? SYSTEM_DEFAULTS.monthPosY }); }} color="blue" />
                             </div>
 
-                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => setCalBottomPadding(SYSTEM_DEFAULTS.bottomPadding)} color="red" />
-                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => setBgScale(SYSTEM_DEFAULTS.bgScale)} color="zinc" />}
+                            <Slider label="下端余白" value={calBottomPadding} min={0} max={100} onChange={(v) => { setCalBottomPadding(v); saveSettings({ calBottomPadding: v }); }} onReset={() => { setCalBottomPadding(userDefaults.bottomPadding ?? SYSTEM_DEFAULTS.bottomPadding); saveSettings({ calBottomPadding: userDefaults.bottomPadding ?? SYSTEM_DEFAULTS.bottomPadding }); }} color="red" />
+                            {bgImage && <Slider label="ズーム" value={bgScale} min={0.1} max={5} step={0.01} onChange={(v) => { setBgScale(v); saveSettings({ bgScale: v }); }} onReset={() => { setBgScale(userDefaults.bgScale ?? SYSTEM_DEFAULTS.bgScale); saveSettings({ bgScale: userDefaults.bgScale ?? SYSTEM_DEFAULTS.bgScale }); }} color="zinc" />}
                         </div>
                     </div>
 
                     <div className="flex flex-col items-center w-full max-w-[416px]">
                         <div style={{ height: `${WATCH_HEIGHT * previewScale}px`, width: `${WATCH_WIDTH * previewScale}px` }} className="relative mb-4">
-                            <div className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]" style={{ transform: `scale(${previewScale})` }} onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }} onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={() => { setIsDragging(false); setInitialDist(null); saveSettings(); }}>
+                            <div className="absolute top-0 left-0 w-[416px] h-[496px] group cursor-move touch-none origin-top-left rounded-[64px]" style={{ transform: `scale(${previewScale})` }} onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={handleEnd} onMouseLeave={handleEnd} onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd} onTouchCancel={handleEnd}>
                                 <div className="absolute -inset-4 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
                                 <div className="relative p-2 bg-gradient-to-b from-zinc-700 to-zinc-900 rounded-[64px] shadow-2xl overflow-hidden w-full h-full">
                                     <div className="relative bg-black rounded-[56px] overflow-hidden border-[6px] border-zinc-900 shadow-inner w-full h-full">
