@@ -489,12 +489,16 @@ const openHistoryDatabase = () => {
     }
     return historyDatabasePromise;
 };
+const retainWatchHistory = (entries) => {
+    const automatic = new Set(entries.filter(item => item.isAuto).slice(0, 5));
+    return entries.filter(item => !item.isAuto || automatic.has(item));
+};
 const readSavedHistory = async () => {
     const db = await openHistoryDatabase();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction('history', 'readonly');
         const request = transaction.objectStore('history').get('entries');
-        transaction.oncomplete = () => resolve(Array.isArray(request.result) ? request.result.filter(item => item && item.config).slice(0, 20) : []);
+        transaction.oncomplete = () => resolve(Array.isArray(request.result) ? request.result.filter(item => item && item.config) : []);
         transaction.onabort = () => reject(transaction.error || new Error('History read failed'));
         transaction.onerror = () => reject(transaction.error || new Error('History read failed'));
     });
@@ -626,21 +630,37 @@ const loadHolidayData = () => {
             const [settingsLoaded, setSettingsLoaded] = useState(false);
             const settingsSnapshotRef = useRef(null);
             const pendingSettingsRef = useRef(null);
-            const saveTimerRef = useRef(null);
+            const settingsReadyRef = useRef(false);
+            settingsReadyRef.current = settingsLoaded;
+            const exitSavedRef = useRef(false);
             const settingsStorageWarningRef = useRef(false);
             const draggingStateRef = useRef(false);
             draggingStateRef.current = isDragging;
             settingsSnapshotRef.current = { year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, monthPosX, monthPosY };
             const [history, setHistory] = useState([]);
-            const [historyLoaded, setHistoryLoaded] = useState(false);
+            const historyRef = useRef([]);
+            const historyReadyRef = useRef(false);
             const [showHistoryModal, setShowHistoryModal] = useState(false);
             const historyStorageWarningRef = useRef(false);
+            const commitHistory = (entries) => {
+                const retained = retainWatchHistory(entries);
+                historyRef.current = retained;
+                setHistory(retained);
+                if (historyReadyRef.current) {
+                    writeSavedHistory(retained).catch(() => {
+                        if (!historyStorageWarningRef.current) {
+                            historyStorageWarningRef.current = true;
+                            alert('履歴を端末に保存できませんでした。空き容量やブラウザの保存制限を確認してください。保存できなかった履歴はページを閉じると消えます。');
+                        }
+                    });
+                }
+            };
             useEffect(() => {
                 let active = true;
                 readSavedHistory().then(saved => {
                     if (active) {
-                        setHistory(current => [...current, ...saved].slice(0, 20));
-                        setHistoryLoaded(true);
+                        historyReadyRef.current = true;
+                        commitHistory([...historyRef.current, ...saved]);
                     }
                 }).catch(() => {
                     if (active) {
@@ -650,23 +670,21 @@ const loadHolidayData = () => {
                 });
                 return () => { active = false; };
             }, []);
-            useEffect(() => {
-                if (!historyLoaded) return;
-                writeSavedHistory(history).catch(() => {
-                    if (!historyStorageWarningRef.current) {
-                        historyStorageWarningRef.current = true;
-                        alert('履歴を端末に保存できませんでした。空き容量やブラウザの保存制限を確認してください。保存できなかった履歴はページを閉じると消えます。');
-                    }
-                });
-            }, [history, historyLoaded]);
             const saveToHistory = (isAuto = false) => {
                 const snapshot = {
-                    id: Date.now(),
+                    id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
                     timestamp: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                     isAuto,
                     config: { ...settingsSnapshotRef.current }
                 };
-                setHistory(prev => [snapshot, ...prev].slice(0, 20));
+                commitHistory([snapshot, ...historyRef.current]);
+                if (!isAuto) {
+                    pendingSettingsRef.current = { ...settingsSnapshotRef.current };
+                    flushSettings();
+                }
+            };
+            const deleteFromHistory = (id) => {
+                commitHistory(historyRef.current.filter(item => item.id !== id));
             };
             const loadFromHistory = (snapshot) => {
                 const { config } = snapshot;
@@ -763,24 +781,31 @@ const loadHolidayData = () => {
                 const current = { ...settingsSnapshotRef.current, ...updates };
                 settingsSnapshotRef.current = current;
                 pendingSettingsRef.current = current;
-                clearTimeout(saveTimerRef.current);
-                if (draggingStateRef.current) return;
-                saveTimerRef.current = setTimeout(flushSettings, 400);
             };
             useEffect(() => {
                 if (!settingsLoaded) return;
                 saveSettings();
-                return () => clearTimeout(saveTimerRef.current);
             }, [settingsLoaded, year, month, bgImage, bgScale, bgOffset, calVerticalShift, calBottomPadding, calSideMargin, calContentScale, monthPosX, monthPosY, isDragging]);
             useEffect(() => {
-                const saveWhenHidden = () => {
-                    if (document.visibilityState === 'hidden') flushSettings();
+                const saveOnExit = () => {
+                    if (!settingsReadyRef.current || exitSavedRef.current) return;
+                    exitSavedRef.current = true;
+                    pendingSettingsRef.current = { ...settingsSnapshotRef.current };
+                    flushSettings();
+                    saveToHistory(true);
                 };
-                window.addEventListener('pagehide', flushSettings);
-                document.addEventListener('visibilitychange', saveWhenHidden);
+                const onVisibility = () => {
+                    if (document.visibilityState === 'hidden') saveOnExit();
+                    else exitSavedRef.current = false;
+                };
+                const onPageShow = () => { exitSavedRef.current = false; };
+                window.addEventListener('pagehide', saveOnExit);
+                window.addEventListener('pageshow', onPageShow);
+                document.addEventListener('visibilitychange', onVisibility);
                 return () => {
-                    window.removeEventListener('pagehide', flushSettings);
-                    document.removeEventListener('visibilitychange', saveWhenHidden);
+                    window.removeEventListener('pagehide', saveOnExit);
+                    window.removeEventListener('pageshow', onPageShow);
+                    document.removeEventListener('visibilitychange', onVisibility);
                 };
             }, []);
 
@@ -958,7 +983,6 @@ const loadHolidayData = () => {
                 if (generatingRef.current) return;
                 generatingRef.current = true;
                 try {
-                    saveToHistory(true);
                     const canvas = await renderCanvas(false);
                     const dataUrl = canvas.toDataURL('image/png');
                     setGeneratedImage(dataUrl);
@@ -1093,6 +1117,10 @@ const loadHolidayData = () => {
                             </label>
                             <button onClick={downloadImage} className="flex-1 bg-blue-600 hover:bg-blue-500 py-4 rounded-2xl font-bold text-[14px] shadow-xl active:scale-95 transition-all text-white">画像を作成</button>
                         </div>
+                        <div className="flex gap-2 mt-3">
+                            <button type="button" onClick={() => saveToHistory(false)} className="flex-1 text-[14px] bg-zinc-800 text-orange-300 px-2 py-2 rounded-xl border border-zinc-700">保存</button>
+                            <button type="button" onClick={() => setShowHistoryModal(true)} className="flex-1 text-[14px] bg-zinc-800 text-blue-300 px-2 py-2 rounded-xl border border-zinc-700">履歴</button>
+                        </div>
                     </section>
                     <details className="simple-details">
                         <summary>詳細設定</summary>
@@ -1136,10 +1164,6 @@ const loadHolidayData = () => {
                                     }); 
                                 } }} className="text-[14px] bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 rounded-lg text-zinc-400 active:scale-95 transition-all">初期配置に戻す</button>
                             </div>
-                        <div className="flex gap-2 mt-3">
-                            <button type="button" onClick={() => saveToHistory(false)} className="flex-1 text-[14px] bg-zinc-800 text-orange-300 px-2 py-2 rounded-xl border border-zinc-700">設定を保存</button>
-                            <button type="button" onClick={() => setShowHistoryModal(true)} className="flex-1 text-[14px] bg-zinc-800 text-blue-300 px-2 py-2 rounded-xl border border-zinc-700">履歴</button>
-                        </div>
                         <div className="mt-3 pt-3 border-t border-zinc-800 space-y-2" aria-label="休日データの更新">
                             <p className="text-[14px] font-bold text-zinc-200">休日データ</p>
                             <p className="text-[14px] text-zinc-400" role="status">
@@ -1163,13 +1187,16 @@ const loadHolidayData = () => {
                                 </div>
                                 <div className="overflow-y-auto p-3 space-y-2">
                                     {history.length === 0 ? <p className="text-[14px] text-zinc-400 py-6 text-center">履歴がありません</p> : history.map(item => (
-                                        <button type="button" key={item.id} onClick={() => loadFromHistory(item)} className="w-full text-left p-3 bg-zinc-800 rounded-xl">
-                                            <div className="text-[14px] font-bold">{item.config.year}年 {item.config.month}月</div>
-                                            <div className="text-[14px] text-zinc-400">{item.timestamp} {item.isAuto ? '（自動保存）' : '（手動保存）'}</div>
-                                        </button>
+                                        <div key={item.id} className="flex items-center gap-2 bg-zinc-800 rounded-xl">
+                                            <button type="button" onClick={() => loadFromHistory(item)} className="flex-1 min-w-0 text-left p-3">
+                                                <div className="text-[14px] font-bold">{item.config.year}年 {item.config.month}月</div>
+                                                <div className="text-[14px] text-zinc-400">{item.timestamp} {item.isAuto ? '（自動保存）' : '（手動保存・保持）'}</div>
+                                            </button>
+                                            <button type="button" onClick={() => deleteFromHistory(item.id)} className="text-[14px] text-red-300 p-3" aria-label="この履歴を削除">削除</button>
+                                        </div>
                                     ))}
                                 </div>
-                                <p className="text-[14px] text-zinc-400 p-3">履歴は背景画像と一緒にこの端末に最大20件保存されます。</p>
+                                <p className="text-[14px] text-zinc-400 p-3">自動保存は画面を離れたときの最新5件。手動保存は削除するまで保持します。</p>
                             </div>
                         </div>
                     )}
